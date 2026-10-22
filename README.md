@@ -67,6 +67,14 @@ uv sync --all-packages
 
 # 4. Pastikan CLI terpasang dengan benar
 uv run vulnflow --version
+
+# 5. Terapkan migrasi database (FASE 2) — variabel di .env harus di-export dulu
+cd apps/api
+uv run alembic upgrade head
+
+# 6. (Opsional) Seed akun admin & template paket Free/Pro
+export SEED_ADMIN_PASSWORD="<password-kuat>"
+uv run python -c "from app.core.database import make_engine, make_session_factory, get_database_url; from app.core.seeder import seed_defaults; s = make_session_factory(make_engine(get_database_url()))(); seed_defaults(s)"
 ```
 
 ## Menjalankan Gerbang Mutu
@@ -92,7 +100,8 @@ Lihat tracker lengkap di [`PLAN.md`](../DOCS/PLAN.md). Ringkasan saat ini:
 - [x] Dokumentasi (SRS, SDD, Edge Cases) — selesai
 - [x] **FASE 0** — Monorepo scaffolding, `docker-compose`, linter/type-checker, `check_quality.py` — selesai & terverifikasi (`uv sync --all-packages` resolve bersih, gerbang mutu jalan end-to-end)
 - [x] FASE 1 — Pydantic V2 Shared Contracts — Selesai 35 unit test, coverage 94.3%
-- [ ] FASE 2-7 — lihat `PLAN.md`
+- [x] FASE 2 — Database Layer (The Lean 11 Tables) — Selesai 59 unit test, coverage 97.3%; migrasi Alembic diterapkan & seeder diverifikasi terhadap PostgreSQL 16 nyata
+- [ ] FASE 3-7 — lihat `PLAN.md`
 
 ## Lintas Mata Kuliah: Desain Web
 

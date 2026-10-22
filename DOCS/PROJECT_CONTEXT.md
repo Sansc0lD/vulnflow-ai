@@ -1,6 +1,6 @@
 # VulnFlow AI — Full Project Context
 
-> Snapshot date: 2026-10-22, commit `7d7da87` ("feat: scaffold monorepo (FASE 0) and shared Pydantic contracts (FASE 1)").
+> Snapshot date: 2026-10-22. FASE 0-2 complete (monorepo scaffolding, Pydantic contracts, SQLAlchemy 2.0 database layer).
 > This is a derived summary for onboarding/orientation. On any conflict, the authoritative sources are `SRS.md`, `SDD.md`, `EDGE_CASES_AND_RESILIENCE.md`, and `PLAN.md` in this same directory — re-check them, as this file can go stale.
 
 ## 1. Product Purpose & Key Constraints
@@ -60,13 +60,13 @@ Design deliberately avoids a separate CWE table (loaded in-memory from `cwe_cata
 
 ## 3. FASE 0–7 Roadmap (PLAN.md)
 
-Overall progress: **~2/8 complete** — docs + FASE 0 + FASE 1 done; FASE 2–7 not started.
+Overall progress: **~3/8 complete** — docs + FASE 0 + FASE 1 + FASE 2 done; FASE 3–7 not started.
 
 | Phase | Scope | Status |
 |---|---|---|
 | **FASE 0** | Monorepo scaffolding: `uv` workspace (`apps/api`, `apps/cli`, `packages/contracts`), directory structure, `docker-compose.yml` (Postgres 16, Redis 7.2, MinIO), ruff/mypy/bandit/pytest config, `scripts/check_quality.py` | **Done** |
 | **FASE 1** | Pydantic V2 shared contracts (`packages/contracts/vulnflow_contracts/`): error_envelope, finding_schemas, auth_schemas, ai_schemas, report_schemas, billing_schemas | **Done** (35 tests, 94.3% coverage) |
-| **FASE 2** | Database layer — 11 SQLAlchemy 2.0 models, Alembic migrations, AES-256-GCM crypto helper, seeder | Not started |
+| **FASE 2** | Database layer — 11 SQLAlchemy 2.0 models, Alembic migrations, AES-256-GCM crypto helper, seeder | **Done** (59 tests, 97.3% coverage; migration applied + seeder verified against real PostgreSQL 16) |
 | **FASE 3** | Domain/security engines — DeduplicationService, CVSSCalculator, ScopeEnforcer, PromptSanitizationService, DeterministicFallbackEngine, SafeURLFetcher | Not started |
 | **FASE 4** | FastAPI routers (Auth, Workspace/Project, Ingest, Triage, AI, Report, Billing) + Celery worker, global exception handling | Not started |
 | **FASE 5** | CLI agent — `configure`, `setup-tools` (cross-platform Nuclei binary download), `scan`, `push` (idempotent chunked upload) | Not started |
@@ -140,11 +140,11 @@ This audit doc is a **point-in-time artifact** explaining *why* contracts look t
 ## 8. Risks / Things to Flag for Upcoming Phases
 
 1. **Documentation vs. code drift risk persists structurally** — SRS/SDD/PLAN/EDGE_CASES are four large, independently-versioned docs that have already needed multiple patch revisions to stay consistent. Double-check current doc wording before building on it; don't assume internal consistency.
-2. **FASE 2 is the next milestone and carries the highest-leverage risk** — the SDD §2.4.2 data dictionary is prose, not committed SQL; nothing enforces that new SQLAlchemy models will match column names/types exactly. Diff new models against SDD §2.4.2 line-by-line.
-3. **CWE fallback catalog (`app/data/cwe_catalog.json`) doesn't exist yet** and its schema isn't specified beyond "curated remediation narratives per CWE" — original content creation needed for FASE 3.5.
+2. ~~**FASE 2 is the next milestone...**~~ Resolved 2026-10-22: 11 SQLAlchemy models implemented and diffed against SDD §2.4.2 field-by-field; migration applied and seeder verified against real PostgreSQL 16 (not just SQLite unit tests). One real-world gap SDD doesn't mention: PostgreSQL requires the partition key column in the primary key of a RANGE-partitioned table, so `audit_logs` uses a composite PK `(id, created_at)` instead of SDD's literal single-column `id` PK — and a partitioned table with zero child partitions rejects every INSERT, so an `audit_logs_default` DEFAULT partition was added in the migration (monthly partition provisioning remains deferred to a later scheduled job, per SDD §2.4.4's "otomatis setiap pergantian bulan").
+3. **CWE fallback catalog (`app/data/cwe_catalog.json`) doesn't exist yet** and its schema isn't specified beyond "curated remediation narratives per CWE" — original content creation needed for FASE 3.5. This is now the next-highest-leverage open risk.
 4. **Reference code snippets in the docs are explicitly illustrative, not production-ready** — e.g. EDGE_CASES_AND_RESILIENCE.md's own `ensure_tools_installed()` snippet violates Bandit B310/B202; SDD's `safe_url_fetcher` snippet fails mypy --strict and has SSRF gaps (IPv4-mapped IPv6, missing 0.0.0.0/8 and fe80::/10 blocks). Rewrite with `httpx` (not `urllib.request`), validate zip member paths before extraction, use `ipaddress` properties (`is_private`, `is_loopback`, `is_link_local`, `ip.ipv4_mapped`) instead of a manual CIDR allowlist.
 5. **`apps/web` is completely absent from the filesystem** — load-bearing for two courses (IPPL dashboard + "Desain Web" rubric). The dual-purpose routing design (public marketing routes with mock data vs. `/app/*` authenticated dashboard) is clear in the docs but unimplemented. The public-route spec lives in an external file `Desweb/DOCS/Dokumentasi_Proyek_Desweb_VulnFlow_AI.docx` one level up from this repo (`IPPL/Desweb/`) — fetch/read before starting FASE 6.
-6. **No FastAPI app, SQLAlchemy models, Alembic setup, or Celery worker exist yet** — `apps/api/app/__init__.py` is a one-line stub. All of FASE 2–4 is greenfield.
+6. **FASE 2 (DB layer) is done**; no FastAPI routers, domain services, or Celery worker exist yet. All of FASE 3–4 is greenfield.
 7. **CLI is a Typer stub** — only `--version` works; real subcommands (`configure`, `setup-tools`, `scan`, `push`) don't exist yet (FASE 5).
 8. **`tests/test_resilience/` is empty** (just `.gitkeep`) — none of the 18 EC tests exist yet; correctly sequenced last, but represents a large bolus of test-writing work at the end.
 9. **Enforcement asymmetry is intentional, not an oversight** (PLAN.md §4.1): lint/type/security gates are zero-tolerance from day one, but coverage/EC-tests are deferred to FASE 7.3 — coverage regressions could silently accumulate through FASE 2–6 without failing CI in the interim.
@@ -155,7 +155,10 @@ This audit doc is a **point-in-time artifact** explaining *why* contracts look t
 - `DOCS/SRS.md`, `DOCS/SDD.md`, `DOCS/EDGE_CASES_AND_RESILIENCE.md`, `DOCS/PLAN.md`, `DOCS/AUDIT_FINDINGS.md`
 - `packages/contracts/vulnflow_contracts/{error_envelope,finding_schemas,auth_schemas,ai_schemas,report_schemas,billing_schemas}.py`
 - `tests/contracts/test_schemas.py`
-- `apps/api/app/__init__.py`
+- `apps/api/app/core/{database,crypto,seeder}.py`
+- `apps/api/app/models/{base,user,workspace,workspace_member,subscription,api_key,project,finding,proof_of_concept,ai_narrative,report,audit_log}.py`
+- `apps/api/migrations/` (Alembic — `env.py` wired to `app.models.Base.metadata` + `DATABASE_URL`)
+- `tests/core/`, `tests/models/`
 - `apps/cli/vulnflow/main.py`
 - `pyproject.toml` (root)
 - `docker-compose.yml`

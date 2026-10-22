@@ -5,20 +5,20 @@
 **Dokumen Acuan:** [SRS v3.5.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SRS.md) | [SDD v1.6.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SDD.md) | [Edge Cases & Resilience](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/EDGE_CASES_AND_RESILIENCE.md)  
 **Metodologi:** **Spec-Driven Development (Contract-First / API-First)**  
 **Status Proyek:** **Tahap Perencanaan Selesai (100%) $\rightarrow$ Memulai Fase Eksekusi Koding**  
-**Terakhir Diperbarui:** 20 Oktober 2026
+**Terakhir Diperbarui:** 22 Oktober 2026
 
 ---
 
 ## 1. Indikator Kemajuan Proyek (*Overall Progress Tracker*)
 
 ```text
-[██████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░] 50% (Dokumen + FASE 0-1 Selesai)
+[██████████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░] 62.5% (Dokumen + FASE 0-2 Selesai)
 - Spesifikasi Kebutuhan (SRS v3.5.0)           : [x] SELESAI (100%)
 - Desain Arsitektur Sistem (SDD v1.6.0)        : [x] SELESAI (100%)
 - Matriks Kasus Batas & Ketahanan (EC-01..18) : [x] SELESAI (100%)
 - Fase 0: Monorepo Scaffolding & Environment   : [x] SELESAI (100%, 6/6 sub-tugas)
 - Fase 1: Pydantic V2 Shared Contracts         : [x] SELESAI (100%, 35 unit test, coverage 94.3%)
-- Fase 2: Database Layer (The Lean 11 Tables)  : [ ] BELUM DIMULAI (0%)
+- Fase 2: Database Layer (The Lean 11 Tables)  : [x] SELESAI (100%, 6/6 sub-tugas, 59 unit test, coverage 97.3%)
 - Fase 3: Domain Core & Security Engines       : [ ] BELUM DIMULAI (0%)
 - Fase 4: FastAPI Routers & Celery Worker      : [ ] BELUM DIMULAI (0%)
 - Fase 5: CLI Agent Lintas Platform            : [ ] BELUM DIMULAI (0%)
@@ -147,27 +147,31 @@ $ python scripts/check_quality.py
 
 > **Tujuan:** Mengimplementasikan 11 model relasional SQLAlchemy 2.0 (Sync mode) dan inisialisasi Alembic, mengacu penuh pada **SDD Bab 2.4.2 (Kamus Data Teknis) tanpa deviasi** — daftar kolom pada tiap tabel di bawah ini hanya contoh ilustratif/kolom yang paling krusial, bukan spesifikasi kolom yang lengkap; implementasi wajib menyalin skema penuh dari Kamus Data SDD.
 
-- [ ] **2.1** Konfigurasi koneksi basis data & session factory di `apps/api/app/core/database.py`.
-- [ ] **2.2** Inisialisasi Alembic migrations (`apps/api/migrations/`).
-- [ ] **2.3** Implementasi 11 Tabel SQLAlchemy Model (`apps/api/app/models/`):
-  - [ ] `User` (`users` - UUID PK, email index, password_hash Argon2id, token_version).
-  - [ ] `Workspace` (`workspaces` - custom_logo_url, brand colors, confidentiality_text).
-  - [ ] `WorkspaceMember` (`workspace_members` - workspace_id FK, user_id FK, role ENUM).
-  - [ ] `Subscription` (`subscriptions` - tier, reports counter, Midtrans fields).
-  - [ ] `APIKey` (`api_keys` - key_hash SHA-256, label, is_active).
-  - [ ] `Project` (`projects` - target_scope, roe dates, lead_pentester_id FK).
-  - [ ] `Finding` (`findings` - dedup_hash, cvss metrics, nullable target_port, version int).
-  - [ ] `ProofOfConcept` (`proofs_of_concept` - AES-256-GCM encrypted_raw_evidence, iv_nonce, auth_tag, **key_version** [wajib, dasar rotasi kunci master — SDD §2.4.3]).
-  - [ ] `AINarrative` (`ai_narratives` - project_id FK, tokens_consumed, is_fallback).
-  - [ ] `Report` (`reports` - project_id FK, storage_path, watermark_applied).
-  - [ ] `AuditLog` (`audit_logs` - partition by range created_at monthly).
-- [ ] **2.4** Helper Kriptografi Enkripsi Kolom At-Rest:
-  - [ ] Modul `apps/api/app/core/crypto.py` (AES-256-GCM AEAD enkripsi/dekripsi bukti PoC).
-- [ ] **2.5** Eksekusi migrasi awal:
-  - [ ] `alembic revision --autogenerate -m "create_lean_11_tables"`
-  - [ ] `alembic upgrade head`
-- [ ] **2.6** Pembuatan seeder data default (`apps/api/app/core/seeder.py`):
-  - [ ] Seed akun admin awal, template paket langganan Free & Pro.
+- [x] **2.1** Konfigurasi koneksi basis data & session factory di `apps/api/app/core/database.py`.
+- [x] **2.2** Inisialisasi Alembic migrations (`apps/api/migrations/`).
+- [x] **2.3** Implementasi 11 Tabel SQLAlchemy Model (`apps/api/app/models/`):
+  - [x] `User` (`users` - UUID PK, email index, password_hash Argon2id, token_version).
+  - [x] `Workspace` (`workspaces` - custom_logo_url, brand colors, confidentiality_text).
+  - [x] `WorkspaceMember` (`workspace_members` - workspace_id FK, user_id FK, role ENUM).
+  - [x] `Subscription` (`subscriptions` - tier, reports counter, Midtrans fields).
+  - [x] `APIKey` (`api_keys` - key_hash SHA-256, label, is_active).
+  - [x] `Project` (`projects` - target_scope, roe dates, lead_pentester_id FK).
+  - [x] `Finding` (`findings` - dedup_hash, cvss metrics, nullable target_port, version int).
+  - [x] `ProofOfConcept` (`proofs_of_concept` - AES-256-GCM encrypted_raw_evidence, iv_nonce, auth_tag, **key_version** [wajib, dasar rotasi kunci master — SDD §2.4.3]).
+  - [x] `AINarrative` (`ai_narratives` - project_id FK, tokens_consumed, is_fallback).
+  - [x] `Report` (`reports` - project_id FK, storage_path, watermark_applied).
+  - [x] `AuditLog` (`audit_logs` - partition by range created_at monthly; composite PK `(id, created_at)` wajib secara teknis di PostgreSQL untuk kolom partition key, plus partisi `DEFAULT` agar tabel langsung bisa menerima INSERT — partisi bulanan otomatis didelegasikan ke scheduled job di fase berikutnya).
+- [x] **2.4** Helper Kriptografi Enkripsi Kolom At-Rest:
+  - [x] Modul `apps/api/app/core/crypto.py` (AES-256-GCM AEAD enkripsi/dekripsi bukti PoC).
+- [x] **2.5** Eksekusi migrasi awal:
+  - [x] `alembic revision --autogenerate -m "create_lean_11_tables"`
+  - [x] `alembic upgrade head`
+- [x] **2.6** Pembuatan seeder data default (`apps/api/app/core/seeder.py`):
+  - [x] Seed akun admin awal, template paket langganan Free & Pro.
+
+**Bukti Verifikasi (22 Oktober 2026):** 59 unit test (`tests/core/`, `tests/models/`), coverage 97.3%, seluruh 11 tabel + partisi `audit_logs_default` dikonfirmasi di PostgreSQL 16 lokal (`docker compose up postgres` + `alembic upgrade head`); seeder dijalankan dua kali berturut-turut terhadap database nyata untuk memverifikasi idempotensi (1 admin, 2 workspace template FREE/PRO dengan kuota 3/30 — tidak terduplikasi). Model menggunakan tipe kolom cross-dialect (`Uuid`, `JSON().with_variant(JSONB, "postgresql")`, `DateTime(timezone=True)`) agar unit test berjalan di SQLite tanpa Docker, sementara DDL PostgreSQL tetap sesuai SDD §2.4.2 (UUID/JSONB/TIMESTAMPTZ/BYTEA asli). `uv run python scripts/check_quality.py` lolos (ruff, mypy --strict, bandit, pip-audit nol temuan).
+
+**Review Pasca-Implementasi (22 Oktober 2026, sebelum FASE 3):** Manual code review menemukan 1 bug nyata (bukan drift dokumen): `findings.dedup_hash` memiliki `index=True` pada kolom DAN `UniqueConstraint` terpisah di `__table_args__` — dua konstruksi SQLAlchemy yang independen sehingga menghasilkan **dua index btree redundan** pada kolom yang sama (`ix_findings_dedup_hash` + `uq_finding_dedup`), terverifikasi langsung di PostgreSQL via `\d findings`. Pola `unique=True` + `index=True` langsung pada kolom (dipakai di `users.email`, `subscriptions.workspace_id`, `proofs_of_concept.finding_id`) sudah benar menyatu jadi satu index — hanya `findings.dedup_hash` yang memakai pola berbeda dan luput. Diperbaiki: `index=True` dihapus dari kolom, `UniqueConstraint` tetap menyediakan index untuk lookup. Migrasi awal diedit langsung (belum pernah di-commit/dibagikan) lalu `alembic downgrade base && alembic upgrade head` dijalankan ulang; 59 test tetap lolos, seeder diverifikasi ulang idempoten terhadap database yang di-migrasi ulang.
 
 ---
 
