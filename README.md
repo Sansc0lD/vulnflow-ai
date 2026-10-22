@@ -91,7 +91,7 @@ Lihat tracker lengkap di [`PLAN.md`](../DOCS/PLAN.md). Ringkasan saat ini:
 
 - [x] Dokumentasi (SRS, SDD, Edge Cases) — selesai
 - [x] **FASE 0** — Monorepo scaffolding, `docker-compose`, linter/type-checker, `check_quality.py` — selesai & terverifikasi (`uv sync --all-packages` resolve bersih, gerbang mutu jalan end-to-end)
-- [x] FASE 1 — Pydantic V2 Shared Contracts — Selesai 29 unit test, coverage 94%
+- [x] FASE 1 — Pydantic V2 Shared Contracts — Selesai 35 unit test, coverage 94.3%
 - [ ] FASE 2-7 — lihat `PLAN.md`
 
 ## Lintas Mata Kuliah: Desain Web

@@ -1132,7 +1132,6 @@ Semua parser (Nmap, Nuclei, Manual Form) wajib menormalisasi data ke dalam struk
   "required": [
     "title",
     "severity",
-    "cvss_version",
     "target_host",
     "source_tool",
     "proof_of_concept"

@@ -17,7 +17,7 @@
 - Desain Arsitektur Sistem (SDD v1.6.0)        : [x] SELESAI (100%)
 - Matriks Kasus Batas & Ketahanan (EC-01..18) : [x] SELESAI (100%)
 - Fase 0: Monorepo Scaffolding & Environment   : [x] SELESAI (100%, 6/6 sub-tugas)
-- Fase 1: Pydantic V2 Shared Contracts         : [x] SELESAI (100%, 29 unit test, coverage 94%)
+- Fase 1: Pydantic V2 Shared Contracts         : [x] SELESAI (100%, 35 unit test, coverage 94.3%)
 - Fase 2: Database Layer (The Lean 11 Tables)  : [ ] BELUM DIMULAI (0%)
 - Fase 3: Domain Core & Security Engines       : [ ] BELUM DIMULAI (0%)
 - Fase 4: FastAPI Routers & Celery Worker      : [ ] BELUM DIMULAI (0%)
@@ -138,8 +138,8 @@ $ python scripts/check_quality.py
   - [x] Model `MidtransCheckoutRequest` & `MidtransCheckoutResponse` (`snap_token`).
   - [x] Model `MidtransWebhookPayload` (validasi format signature SHA-512: panjang 128 hex char; verifikasi kriptografis penuh terhadap ServerKey tetap di domain service FASE 4).
 - [x] **1.7** Pengujian Unit Kontrak:
-  - [x] Test serialisasi & deserialisasi model Pydantic V2 (`tests/contracts/test_schemas.py`) — 29 test, memakai contoh JSON asli SDD §2.6.1/§2.6.3 + kasus validasi gagal (CWE malformed, port di luar rentang, password lemah, gross_amount Midtrans belum ternormalisasi).
-  - [x] Validasi kesesuaian JSON Schema terhadap Bab 2.6.1 SDD — diverifikasi lolos `check_quality.py` (ruff, mypy --strict, bandit, pytest 94.0% coverage, pip-audit).
+  - [x] Test serialisasi & deserialisasi model Pydantic V2 (`tests/contracts/test_schemas.py`) — 35 test, memakai contoh JSON asli SDD §2.6.1/§2.6.3 + kasus validasi gagal (CWE malformed, port di luar rentang, password lemah, gross_amount Midtrans belum ternormalisasi).
+  - [x] Validasi kesesuaian JSON Schema terhadap Bab 2.6.1 SDD — diverifikasi lolos `check_quality.py` (ruff, mypy --strict, bandit, pytest 94.3% coverage, pip-audit).
 
 ---
 

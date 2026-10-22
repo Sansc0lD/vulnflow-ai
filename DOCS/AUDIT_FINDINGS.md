@@ -23,7 +23,7 @@ Berdasarkan pelacakan pada [`PLAN.md`](file:///c:/Users/KaliCodeS3/Documents/Pro
 | :--- | :---: | :---: | :--- |
 | **Dokumen Spesifikasi** (`SRS v3.5.0`, `SDD v1.6.0`, `EDGE_CASES_AND_RESILIENCE`, `PLAN`) | **100% SELESAI** | **Terverifikasi** | Keempat dokumen utama telah lengkap, menyatukan arsitektur Vue 3 + `shadcn-vue` (rute publik Desweb + rute `/app/*` IPPL) serta 18 skenario `EC-01..EC-18`. Namun masih ditemukan beberapa inkonsistensi internal antar-bab yang dapat berdampak pada FASE 2–5 (lihat Seksi 3). |
 | **FASE 0: Monorepo Scaffolding & Environment** (`0.1`–`0.6`) | **100% SELESAI** (6/6) | **Terverifikasi** | Workspace `uv` ([`pyproject.toml`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/pyproject.toml), [`apps/api/pyproject.toml`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/apps/api/pyproject.toml), [`apps/cli/pyproject.toml`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/apps/cli/pyproject.toml), [`packages/contracts/pyproject.toml`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/packages/contracts/pyproject.toml)), [`docker-compose.yml`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/docker-compose.yml), [`.env.example`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/.env.example), [`.gitignore`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/.gitignore), dan [`scripts/check_quality.py`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/scripts/check_quality.py) sudah terbentuk. |
-| **FASE 1: Pydantic V2 Shared Contracts** (`1.1`–`1.7`) | **100% SELESAI** (7/7) | **Terverifikasi (29/29 test PASS)** | Seluruh 6 modul kontrak di [`packages/contracts/vulnflow_contracts/`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/packages/contracts/vulnflow_contracts) dan 29 unit test di [`tests/contracts/test_schemas.py`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/tests/contracts/test_schemas.py) mencapai **100% coverage** pada `packages/contracts` (**94.0%** gabungan dengan stub CLI). |
+| **FASE 1: Pydantic V2 Shared Contracts** (`1.1`–`1.7`) | **100% SELESAI** (7/7) | **Terverifikasi (35/35 test PASS)** | Seluruh 6 modul kontrak di [`packages/contracts/vulnflow_contracts/`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/packages/contracts/vulnflow_contracts) dan 35 unit test di [`tests/contracts/test_schemas.py`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/tests/contracts/test_schemas.py) mencapai **100% coverage** pada `packages/contracts` (**94.3%** gabungan dengan stub CLI). |
 | **FASE 2: Database Layer (The Lean 11 Tables)** | **0% (Belum Dimulai)** | [`apps/api/app/__init__.py`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/vulnflow-ai/apps/api/app/__init__.py) baru berupa stub versi | Target pengerjaan berikutnya sesuai [`PLAN.md` §FASE 2](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/PLAN.md#L146-L171). |
 | **FASE 3: Domain Core & Security Engines** | **0% (Belum Dimulai)** | Belum ada `app/domain/` atau `app/services/` | Menunggu FASE 2. |
 | **FASE 4: FastAPI Routers & Celery Worker** | **0% (Belum Dimulai)** | Belum ada `app/routers/` atau `app/workers/` | Menunggu FASE 2 & 3. |
@@ -37,7 +37,7 @@ $ uv run python scripts/check_quality.py
 [1/5] Menjalankan Ruff Formatter & Linter...           [✓ PASS]
 [2/5] Menjalankan Mypy Strict Type Check...            [✓ PASS]
 [3/5] Menjalankan Bandit Security SAST...              [✓ PASS]
-[4/5] Menjalankan Pytest & Evaluasi Coverage...        [✓ PASS] (Coverage: 94.0%)
+[4/5] Menjalankan Pytest & Evaluasi Coverage...        [✓ PASS] (Coverage: 94.3%)
 [5/5] Menjalankan Kerentanan Dependensi (Audit)...     [✓ PASS]
 
 [SUCCESS] Seluruh Quality Gates Lolos! Kode siap di-commit.
@@ -115,7 +115,7 @@ Aspek implementasi FASE 0 dan FASE 1 yang sudah memenuhi standar rekayasa perang
   - Sebaliknya, Kamus Data [`SDD.md` §2.4.2 Tabel 3 `workspace_members`](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SDD.md#L866) (yang diinstruksikan [`PLAN.md` baris 148](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/PLAN.md#L148) disalin *"tanpa deviasi"*) mendefinisikan `'MANAGER' | 'PENTESTER' | 'VIEWER'`.
   - Jika tabel `workspace_members` di FASE 2 menyimpan `'MANAGER'`, maka response `POST /api/v1/auth/login` (`TokenResponse` $\rightarrow$ `UserDTO`) akan melempar `ValidationError` dari Pydantic.
 - **Rekomendasi Perbaikan:**
-  - Seragamkan nilai enum role menjadi `OWNER`, `PENTESTER`, `VIEWER` pada Kamus Data SDD §2.4.2 dan model SQLAlchemy FASE 2.
+  - Seragamkan nilai enum role menjadi `MANAGER`, `PENTESTER`, `VIEWER` pada Kamus Data SDD §2.4.2 dan model SQLAlchemy FASE 2.
 
 ---
 
@@ -298,7 +298,7 @@ Aspek implementasi FASE 0 dan FASE 1 yang sudah memenuhi standar rekayasa perang
 ## 4. Checklist Rekomendasi Tindak Lanjut Sebelum Memulai FASE 2
 
 ### Langkah 1: Remediasi Kontrak & Spesifikasi Skema DB (Agar FASE 2–4 Bebas Konflik)
-- [x] **`[HIGH-02]`** Seragamkan enum role di Kamus Data `SDD.md §2.4.2` Tabel 3 (`workspace_members`) menjadi `'OWNER' | 'PENTESTER' | 'VIEWER'`.
+- [x] **`[HIGH-02]`** Seragamkan enum role di Kamus Data `SDD.md §2.4.2` Tabel 3 (`workspace_members`) menjadi `'MANAGER' | 'PENTESTER' | 'VIEWER'`.
 - [x] **`[HIGH-03]`** Tambahkan field opsional `endpoint_path: str = Field(default="", max_length=500)` pada `UnifiedVulnerabilityFinding` & `ManualFindingRequest` (`finding_schemas.py`), serta kolom `endpoint_path` pada Tabel 7 `findings` di `SDD.md §2.4.2`.
 - [x] **`[HIGH-04]`** Selaraskan JSON schema di System Prompt `SDD.md §2.6.2.2` dengan `NarrativeContent`, dan tambahkan `is_fallback: bool = False` pada `AINarrativeResponse` (`ai_schemas.py`).
 - [x] **`[MED-04]`** Selaraskan nama & tipe kolom di `SDD.md §2.4.2` (`is_quarantined` di `findings`, `roe_start_date`/`roe_end_date` `TIMESTAMPTZ` + `timezone` di `projects`, `tokens_consumed` di `ai_narratives`, `storage_path` & `watermark_applied` di `reports`, serta case enum `payment_status` di `subscriptions`).

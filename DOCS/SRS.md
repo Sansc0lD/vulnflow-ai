@@ -171,17 +171,17 @@ Sistem mendefinisikan 4 persona pengguna dengan matriks kewenangan terinci:
 
 ### 2.3 Lingkungan Operasi & Deployment
 
-#### 2.4.1 Lingkungan Mesin Klien (Local Pentester Machine)
+#### 2.3.1 Lingkungan Mesin Klien (Local Pentester Machine)
 - **Sistem Operasi:** Linux (Distro resmi: Kali Linux 2023.x–2026.x, Parrot OS 5.x+, Ubuntu 22.04/24.04 LTS), macOS Ventura/Sonoma, Windows 11 dengan WSL2.
 - **Python Runtime:** Python versi 3.10, 3.11, atau 3.12 (disertai paket `pip` dan `virtualenv`).
 - **Dependencies CLI:** `httpx` (async HTTP), `pydantic v2` (skema validasi), `rich` (antarmuka visual terminal), `typer` (framework CLI), `defusedxml` (parser XML Nmap anti-XXE).
 - **Installed Tools:** Nmap (Network Mapper) 7.90+ pada path sistem, ProjectDiscovery Nuclei v3.0+.
 
-#### 2.4.2 Lingkungan Server Cloud (Cloud SaaS Stack)
+#### 2.3.2 Lingkungan Server Cloud (Cloud SaaS Stack)
 - **Containerization:** Docker Engine 24.0+ dengan Docker Compose v2 atau Kubernetes 1.28+.
 - **Backend API Server:** FastAPI (Python 3.12+) berjalan di atas server ASGI Uvicorn dengan multi-workers di belakang Gunicorn.
 - **Frontend SPA Server:** Node.js 20+ runtime atau static host Nginx menyajikan bundel aplikasi Vue 3 (Composition API) + Vite (Single Page Application murni, tanpa Server-Side Rendering/Nuxt). Stack ini dipilih agar satu basis kode web yang sama memenuhi baik kebutuhan fungsional VulnFlow AI (IPPL) maupun rubrik wajib mata kuliah Desain Web (Vue 3 Composition API & Vue Router).
-- **Relational DBMS:** PostgreSQL 15+ dengan ekstensi `uuid-ossp` dan tipe data `jsonb`.
+- **Relational DBMS:** PostgreSQL 16+ dengan ekstensi `uuid-ossp` dan tipe data `jsonb`.
 - **Asynchronous Worker:** Celery / ARQ dengan broker **Redis 7.2**.
 - **PDF Rendering Engine:** WeasyPrint v61+ dengan pustaka grafis sistem `pango`, `cairo`, dan `gdk-pixbuf`.
 
@@ -1101,7 +1101,7 @@ Tabel matriks keterlacakan memastikan seluruh kebutuhan fungsional dan 19 use ca
 
 ## PENUTUP & LEMBAR PENGESAHAN
 
-Dokumen Spesifikasi Kebutuhan Perangkat Lunak (*Software Requirements Specification*) Versi 3.1.0 ini telah diselesaikan dan dimutakhirkan secara komprehensif mengacu pada standar rekayasa perangkat lunak internasional **ISO/IEC/IEEE 29148:2018**, model kualitas **ISO/IEC 25010:2023**, pemodelan formal **UML 2.5 (19 Use Cases terdekomposisi granular beserta 14 sub-kasus include/extend)**, serta standar kalkulasi kerentanan **FIRST CVSS v3.1 & v4.0** untuk mata kuliah **Implementasi Perancangan Perangkat Lunak (IPPL)**. 
+Dokumen Spesifikasi Kebutuhan Perangkat Lunak (*Software Requirements Specification*) Versi 3.5.0 ini telah diselesaikan dan dimutakhirkan secara komprehensif mengacu pada standar rekayasa perangkat lunak internasional **ISO/IEC/IEEE 29148:2018**, model kualitas **ISO/IEC 25010:2023**, pemodelan formal **UML 2.5 (19 Use Cases terdekomposisi granular beserta 14 sub-kasus include/extend)**, serta standar kalkulasi kerentanan **FIRST CVSS v3.1 & v4.0** untuk mata kuliah **Implementasi Perancangan Perangkat Lunak (IPPL)**. 
 
 Dokumen ini menjadi spesifikasi kontrak kebutuhan teknis yang mengikat dan diwujudkan secara arsitektural di dalam dokumen pendamping: **[Software Design Description (SDD) v1.6.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SDD.md)**.
 

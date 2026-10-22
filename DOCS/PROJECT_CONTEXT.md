@@ -65,7 +65,7 @@ Overall progress: **~2/8 complete** — docs + FASE 0 + FASE 1 done; FASE 2–7 
 | Phase | Scope | Status |
 |---|---|---|
 | **FASE 0** | Monorepo scaffolding: `uv` workspace (`apps/api`, `apps/cli`, `packages/contracts`), directory structure, `docker-compose.yml` (Postgres 16, Redis 7.2, MinIO), ruff/mypy/bandit/pytest config, `scripts/check_quality.py` | **Done** |
-| **FASE 1** | Pydantic V2 shared contracts (`packages/contracts/vulnflow_contracts/`): error_envelope, finding_schemas, auth_schemas, ai_schemas, report_schemas, billing_schemas | **Done** (29 tests, 94% coverage) |
+| **FASE 1** | Pydantic V2 shared contracts (`packages/contracts/vulnflow_contracts/`): error_envelope, finding_schemas, auth_schemas, ai_schemas, report_schemas, billing_schemas | **Done** (35 tests, 94.3% coverage) |
 | **FASE 2** | Database layer — 11 SQLAlchemy 2.0 models, Alembic migrations, AES-256-GCM crypto helper, seeder | Not started |
 | **FASE 3** | Domain/security engines — DeduplicationService, CVSSCalculator, ScopeEnforcer, PromptSanitizationService, DeterministicFallbackEngine, SafeURLFetcher | Not started |
 | **FASE 4** | FastAPI routers (Auth, Workspace/Project, Ingest, Triage, AI, Report, Billing) + Celery worker, global exception handling | Not started |
@@ -111,7 +111,7 @@ All 6 modules exist, Pydantic V2, `ConfigDict(extra="forbid")` by default (one d
 - **`report_schemas.py`**: `ReportJobStatus` enum, `ThemeOptions`, `CompilePDFRequest`, `CompilePDFAcceptedResponse`, `ReportJobStatusResponse`, `ReportDownloadResponse` (EC-17 support).
 - **`billing_schemas.py`**: `SubscriptionTier` (PRO/ENTERPRISE — FREE isn't purchasable), `MidtransTransactionStatus`, `MidtransCheckoutRequest`/`Response`, `MidtransWebhookPayload` — deliberately uses `extra="ignore"` (external-system payload), case-insensitive hex signature regex.
 
-Tests: `tests/contracts/test_schemas.py`, 29 tests, round-trips SDD example JSON plus negative-validation cases (malformed CWE, out-of-range port, weak password, un-normalized Midtrans `gross_amount`). Contracts package coverage 100%.
+Tests: `tests/contracts/test_schemas.py`, 35 tests, round-trips SDD example JSON plus negative-validation cases (malformed CWE, out-of-range port, weak password, un-normalized Midtrans `gross_amount`). Contracts package coverage 100%.
 
 ## 6. Audit Findings (DOCS/AUDIT_FINDINGS.md) — All Resolved
 
