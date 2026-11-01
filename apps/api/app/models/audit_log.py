@@ -9,7 +9,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, JSONVariant
@@ -30,9 +30,21 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), primary_key=True, default=_utc_now
     )
-    workspace_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True
-    )
+    # Deliberately NOT a foreign key. SRS UC-04 E2 step 2 and UC-19 E1 require
+    # audit rows to outlive the permanent purge of their workspace ("tetap
+    # tersimpan sebagai referensi historis ... tidak di-cascade-delete") as
+    # platform compliance evidence. An FK cannot express that: ON DELETE
+    # CASCADE destroys the very rows that must be kept — including the
+    # WORKSPACE_PURGED entry written moments earlier — and it does so through
+    # a referential-integrity trigger that runs with the table owner's rights,
+    # so the "REVOKE DELETE ON audit_logs" control in SDD §2.4.4 does not stop
+    # it. ON DELETE RESTRICT would instead make the purge impossible. The
+    # column therefore keeps the workspace id as a dangling historical
+    # reference, which is exactly what the SRS specifies.
+    workspace_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False, index=True)
+    # The FK here is intentional and has no ondelete action (NO ACTION), so a
+    # user who has acted on the platform cannot be hard-deleted — UC-18
+    # suspends accounts (`users.status`) rather than deleting them.
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
     action: Mapped[str] = mapped_column(String(50), nullable=False)
     target_entity: Mapped[str] = mapped_column(String(50), nullable=False)

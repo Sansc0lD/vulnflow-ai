@@ -8,6 +8,7 @@ from vulnflow_contracts.ai_schemas import (
 )
 from vulnflow_contracts.auth_schemas import (
     LoginRequest,
+    NormalizedEmail,
     RegisterRequest,
     RegisterResponse,
     TokenResponse,
@@ -28,6 +29,7 @@ from vulnflow_contracts.finding_schemas import (
     BatchIngestResponse,
     CVSSVersion,
     FindingStatus,
+    FindingStatusResponse,
     ManualFindingRequest,
     ManualFindingResponse,
     ProofOfConceptSchema,
@@ -36,6 +38,7 @@ from vulnflow_contracts.finding_schemas import (
     Severity,
     SourceTool,
     UnifiedVulnerabilityFinding,
+    UpdateFindingStatusRequest,
 )
 from vulnflow_contracts.report_schemas import (
     CompilePDFAcceptedResponse,
@@ -45,12 +48,27 @@ from vulnflow_contracts.report_schemas import (
     ReportJobStatusResponse,
     ThemeOptions,
 )
+from vulnflow_contracts.workspace_schemas import (
+    APIKeyCreateRequest,
+    APIKeyCreateResponse,
+    AssignLeadRequest,
+    InviteMemberRequest,
+    InviteMemberResponse,
+    ProjectCreateRequest,
+    ProjectResponse,
+    WorkspaceCreateRequest,
+    WorkspaceResponse,
+    WorkspaceUpdateRequest,
+)
 
 __version__ = "0.1.0"
 
 __all__ = [
     "AINarrativeRequest",
     "AINarrativeResponse",
+    "APIKeyCreateRequest",
+    "APIKeyCreateResponse",
+    "AssignLeadRequest",
     "BatchIngestRequest",
     "BatchIngestResponse",
     "CVSSVersion",
@@ -59,6 +77,9 @@ __all__ = [
     "ErrorCode",
     "ErrorDetail",
     "FindingStatus",
+    "FindingStatusResponse",
+    "InviteMemberRequest",
+    "InviteMemberResponse",
     "LoginRequest",
     "ManualFindingRequest",
     "ManualFindingResponse",
@@ -67,6 +88,9 @@ __all__ = [
     "MidtransTransactionStatus",
     "MidtransWebhookPayload",
     "NarrativeContent",
+    "NormalizedEmail",
+    "ProjectCreateRequest",
+    "ProjectResponse",
     "ProofOfConceptSchema",
     "Protocol",
     "RegisterRequest",
@@ -83,7 +107,11 @@ __all__ = [
     "ThemeOptions",
     "TokenResponse",
     "UnifiedVulnerabilityFinding",
+    "UpdateFindingStatusRequest",
     "UserDTO",
+    "WorkspaceCreateRequest",
     "WorkspaceMembership",
+    "WorkspaceResponse",
     "WorkspaceRole",
+    "WorkspaceUpdateRequest",
 ]

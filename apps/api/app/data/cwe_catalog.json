@@ -1,0 +1,42 @@
+{
+  "CWE-89": {
+    "title": "SQL Injection",
+    "business_impact": "An attacker can read, modify, or delete arbitrary data in the backing database, potentially exposing sensitive customer or financial records and undermining data integrity.",
+    "remediation": "Use parameterized queries or an ORM with bound parameters for all database access; never concatenate untrusted input into SQL strings. Apply least-privilege database accounts and validate/allowlist input where feasible."
+  },
+  "CWE-79": {
+    "title": "Cross-Site Scripting (XSS)",
+    "business_impact": "An attacker can execute arbitrary script in a victim's browser session, enabling session hijacking, credential theft, or defacement of the application.",
+    "remediation": "Contextually encode/escape all untrusted output rendered in HTML, JS, or URL contexts. Apply a strict Content-Security-Policy and use templating engines with automatic output escaping enabled."
+  },
+  "CWE-22": {
+    "title": "Path Traversal",
+    "business_impact": "An attacker can read or write files outside the intended directory, potentially exposing configuration secrets or achieving remote code execution.",
+    "remediation": "Resolve and canonicalize user-supplied paths, then verify they remain within an allowlisted base directory before use. Avoid passing raw user input directly to filesystem APIs."
+  },
+  "CWE-287": {
+    "title": "Improper Authentication",
+    "business_impact": "An attacker can bypass identity verification entirely, gaining unauthorized access to protected functionality or data.",
+    "remediation": "Enforce authentication on every protected endpoint via centralized middleware/guards rather than ad-hoc per-route checks. Use well-vetted authentication libraries and require strong credential/session validation."
+  },
+  "CWE-200": {
+    "title": "Exposure of Sensitive Information",
+    "business_impact": "Sensitive internal data (configuration, credentials, PII) is disclosed to unauthorized parties, risking compliance violations and further compromise.",
+    "remediation": "Apply strict output filtering and access controls on any endpoint or error message that could reveal internal state. Review logs, debug endpoints, and error traces for inadvertent data leakage."
+  },
+  "CWE-538": {
+    "title": "Insertion of Sensitive Information into Externally-Accessible File or Directory",
+    "business_impact": "Sensitive files (e.g. VCS metadata, environment configuration) are reachable by unauthenticated clients, potentially exposing credentials or source code.",
+    "remediation": "Exclude sensitive directories (.git, .env, backups) from the web root or explicitly deny access to them at the reverse proxy/server configuration level."
+  },
+  "CWE-502": {
+    "title": "Deserialization of Untrusted Data",
+    "business_impact": "An attacker can craft malicious serialized payloads to achieve remote code execution or denial of service when deserialized by the application.",
+    "remediation": "Avoid deserializing untrusted data with formats that support arbitrary object instantiation (e.g. pickle). Prefer safe data formats (JSON) with strict schema validation."
+  },
+  "UNKNOWN": {
+    "title": "Unclassified Vulnerability",
+    "business_impact": "This finding could not be matched to a known CWE category. Its business impact should be assessed manually based on the specific vulnerability details before this report is finalized.",
+    "remediation": "Review the finding's evidence and CVSS vector manually, consult the relevant CWE taxonomy entry if one becomes available, and apply remediation guidance specific to the underlying weakness class."
+  }
+}

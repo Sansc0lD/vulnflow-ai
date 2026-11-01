@@ -46,3 +46,19 @@ def test_deleting_workspace_cascades_to_members(session: Session) -> None:
     session.commit()
 
     assert session.query(WorkspaceMember).count() == 0
+
+
+def test_deleting_user_with_membership_is_rejected(session: Session) -> None:
+    """EC-03 — SDD §2.7.1 requires the database to *reject* deleting an
+    account before ownership is transferred. Under ON DELETE CASCADE the
+    DELETE succeeded and took the membership with it, leaving a workspace
+    with zero members that no one could reach but which still held its
+    projects, findings and encrypted PoCs.
+    """
+    workspace, user = _make_workspace_and_user(session)
+    session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role="MANAGER"))
+    session.commit()
+
+    session.delete(user)
+    with pytest.raises(IntegrityError):
+        session.commit()

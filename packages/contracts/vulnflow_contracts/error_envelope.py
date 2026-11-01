@@ -16,6 +16,12 @@ class ErrorCode(StrEnum):
     PAYLOAD_TOO_LARGE = "PAYLOAD_TOO_LARGE"
     VALIDATION_FAILED = "VALIDATION_FAILED"
     INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR"
+    # HTTP 409 — added in FASE 4: SDD §2.6.1.7's "Daftar Kode Galat Standar"
+    # only lists 8 codes, but EC-03 (hapus akun tanpa transfer ownership) and
+    # EC-11 (optimistic-locking conflict pada PATCH finding status) both
+    # explicitly require `HTTP 409 Conflict` per EDGE_CASES_AND_RESILIENCE.md
+    # — there was no enum value for it until now.
+    CONFLICT = "CONFLICT"
 
 
 class ErrorDetail(BaseModel):

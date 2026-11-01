@@ -50,9 +50,9 @@ class FindingStatus(StrEnum):
 class ProofOfConceptSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    raw_evidence: str
-    reproduction_steps: list[str] = Field(default_factory=list)
-    attachment_urls: list[AnyUrl] = Field(default_factory=list)
+    raw_evidence: str = Field(max_length=100_000)
+    reproduction_steps: list[str] = Field(default_factory=list, max_length=100)
+    attachment_urls: list[AnyUrl] = Field(default_factory=list, max_length=20)
 
 
 class UnifiedVulnerabilityFinding(BaseModel):
@@ -62,10 +62,12 @@ class UnifiedVulnerabilityFinding(BaseModel):
     severity: Severity
     cvss_version: CVSSVersion = CVSSVersion.V3_1
     cvss_score: float | None = Field(default=None, ge=0.0, le=10.0)
-    cvss_vector: str | None = Field(default=None, max_length=150)
+    cvss_vector: str | None = Field(
+        default=None, pattern=r"^CVSS:3\.1/[A-Za-z0-9:\/._\-]+$", min_length=15, max_length=150
+    )
     cwe_id: str = Field(default="UNKNOWN", pattern=r"^(CWE-[0-9]+|UNKNOWN)$")
     target_host: str = Field(max_length=255)
-    target_port: int | None = Field(default=None, ge=1, le=65535)
+    target_port: int | None = Field(default=None, ge=0, le=65535)
     endpoint_path: str = Field(default="", max_length=500, description="EC-08 dedup_hash component")
     protocol: Protocol = Protocol.TCP
     source_tool: SourceTool
@@ -77,14 +79,14 @@ class ScanMetadata(BaseModel):
 
     scanner_name: str
     scanner_version: str
-    scan_duration_seconds: float
+    scan_duration_seconds: float = Field(ge=0.0, allow_inf_nan=False)
 
 
 class BatchIngestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scan_metadata: ScanMetadata
-    findings: list[UnifiedVulnerabilityFinding] = Field(min_length=1)
+    findings: list[UnifiedVulnerabilityFinding] = Field(min_length=1, max_length=500)
 
 
 class BatchIngestResponse(BaseModel):
@@ -105,10 +107,12 @@ class ManualFindingRequest(BaseModel):
 
     title: str = Field(min_length=1, max_length=255)
     severity: Severity
-    cvss_vector: str = Field(max_length=150)
+    cvss_vector: str = Field(
+        pattern=r"^CVSS:3\.1/[A-Za-z0-9:\/._\-]+$", min_length=15, max_length=150
+    )
     cwe_id: str = Field(default="UNKNOWN", pattern=r"^(CWE-[0-9]+|UNKNOWN)$")
     target_host: str = Field(max_length=255)
-    target_port: int | None = Field(default=None, ge=1, le=65535)
+    target_port: int | None = Field(default=None, ge=0, le=65535)
     endpoint_path: str = Field(default="", max_length=500, description="EC-08 dedup_hash component")
     protocol: Protocol = Protocol.TCP
     proof_of_concept: ProofOfConceptSchema
@@ -129,3 +133,22 @@ class ManualFindingResponse(BaseModel):
     source_tool: Literal[SourceTool.MANUAL] = SourceTool.MANUAL
     status: FindingStatus
     created_at: datetime
+
+
+class UpdateFindingStatusRequest(BaseModel):
+    """PATCH .../findings/{f_id}/status — UC-09. `version` enables EC-11
+    optimistic locking: a stale `version` is rejected with HTTP 409."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: FindingStatus
+    version: int = Field(ge=1)
+
+
+class FindingStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    status: FindingStatus
+    version: int
+    is_curated_for_report: bool

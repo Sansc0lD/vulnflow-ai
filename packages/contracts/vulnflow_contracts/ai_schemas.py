@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 class AINarrativeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    tone: str = "formal_executive"
+    tone: str = Field(default="formal_executive", pattern=r"^[a-zA-Z0-9_\- ]{1,30}$", max_length=30)
     language: str = Field(pattern=r"^(id|en)$")
     sections_requested: list[str] = Field(min_length=1)
     finding_ids: list[str] = Field(min_length=1)

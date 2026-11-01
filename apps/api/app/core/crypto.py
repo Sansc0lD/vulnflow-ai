@@ -26,9 +26,11 @@ def get_encryption_key() -> bytes:
     return key
 
 
-def encrypt_poc(plaintext: bytes, key: bytes) -> tuple[bytes, bytes, bytes]:
+def encrypt_poc(
+    plaintext: bytes, key: bytes, *, associated_data: bytes | None = None
+) -> tuple[bytes, bytes, bytes]:
     iv_nonce = os.urandom(IV_LENGTH_BYTES)
-    ciphertext_and_tag = AESGCM(key).encrypt(iv_nonce, plaintext, None)
+    ciphertext_and_tag = AESGCM(key).encrypt(iv_nonce, plaintext, associated_data)
     ciphertext, auth_tag = (
         ciphertext_and_tag[:-TAG_LENGTH_BYTES],
         ciphertext_and_tag[-TAG_LENGTH_BYTES:],
@@ -36,5 +38,12 @@ def encrypt_poc(plaintext: bytes, key: bytes) -> tuple[bytes, bytes, bytes]:
     return ciphertext, iv_nonce, auth_tag
 
 
-def decrypt_poc(ciphertext: bytes, key: bytes, iv_nonce: bytes, auth_tag: bytes) -> bytes:
-    return AESGCM(key).decrypt(iv_nonce, ciphertext + auth_tag, None)
+def decrypt_poc(
+    ciphertext: bytes,
+    key: bytes,
+    iv_nonce: bytes,
+    auth_tag: bytes,
+    *,
+    associated_data: bytes | None = None,
+) -> bytes:
+    return AESGCM(key).decrypt(iv_nonce, ciphertext + auth_tag, associated_data)

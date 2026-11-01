@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, String, func
+from sqlalchemy import CheckConstraint, DateTime, Index, Integer, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -22,3 +22,15 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+# A plain UNIQUE index on `email` is case-SENSITIVE under PostgreSQL's default
+# collation (`'Alice@corp.com' = 'alice@corp.com'` is false), so on its own it
+# would happily let one mailbox register twice and make login depend on the
+# casing the user happened to type. This functional index is what actually
+# enforces one-account-per-mailbox at the database level; the plain unique
+# index on the column is kept alongside it (not redundant) because the planner
+# cannot use a `lower(email)` index to satisfy the `email = :email` equality
+# lookup performed on every login. Declared outside the class body so it can
+# reference the mapped column itself rather than a string literal.
+Index("uq_users_email_lower", func.lower(User.email), unique=True)

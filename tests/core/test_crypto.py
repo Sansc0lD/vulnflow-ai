@@ -58,6 +58,21 @@ def test_get_encryption_key_raises_when_missing(monkeypatch: pytest.MonkeyPatch)
         get_encryption_key()
 
 
+def test_encrypt_decrypt_poc_with_associated_data() -> None:
+    # F4-LOW-12: AAD binds ciphertext to record identity
+    key = generate_master_key()
+    plaintext = b"secret finding evidence"
+    aad = b"finding-uuid-12345"
+
+    ciphertext, iv_nonce, auth_tag = encrypt_poc(plaintext, key, associated_data=aad)
+    recovered = decrypt_poc(ciphertext, key, iv_nonce, auth_tag, associated_data=aad)
+    assert recovered == plaintext
+
+    # Tampered AAD must fail authentication
+    with pytest.raises(InvalidTag):
+        decrypt_poc(ciphertext, key, iv_nonce, auth_tag, associated_data=b"wrong-finding-id")
+
+
 def test_get_encryption_key_raises_when_wrong_length(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ENCRYPTION_MASTER_KEY", base64.b64encode(b"too-short").decode())
 

@@ -101,7 +101,9 @@ Lihat tracker lengkap di [`PLAN.md`](../DOCS/PLAN.md). Ringkasan saat ini:
 - [x] **FASE 0** — Monorepo scaffolding, `docker-compose`, linter/type-checker, `check_quality.py` — selesai & terverifikasi (`uv sync --all-packages` resolve bersih, gerbang mutu jalan end-to-end)
 - [x] FASE 1 — Pydantic V2 Shared Contracts — Selesai 35 unit test, coverage 94.3%
 - [x] FASE 2 — Database Layer (The Lean 11 Tables) — Selesai 59 unit test, coverage 97.3%; migrasi Alembic diterapkan & seeder diverifikasi terhadap PostgreSQL 16 nyata
-- [ ] FASE 3-7 — lihat `PLAN.md`
+- [x] FASE 3 — Domain Core & Security Engines — Selesai 120 test case, coverage 96.7% (DeduplicationService, CVSSCalculator, ScopeEnforcer, PromptSanitizationService, DeterministicFallbackEngine, SafeURLFetcher)
+- [x] FASE 4 — FastAPI Routers & Celery Worker — Implementasi selesai, 271 test case, coverage 94.4% (Auth, Workspace/Project, Ingest, Triage, AI, Report+Celery, Billing). ⚠️ **Belum siap produksi** — audit pasca-implementasi menemukan 2 CRITICAL (IDOR lintas tenant) + 16 HIGH belum diperbaiki, lihat `DOCS/AUDIT_FINDINGS.md` §5
+- [ ] FASE 5-7 — lihat `PLAN.md`
 
 ## Lintas Mata Kuliah: Desain Web
 

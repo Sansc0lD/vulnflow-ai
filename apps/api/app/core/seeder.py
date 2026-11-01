@@ -40,7 +40,7 @@ def _get_or_create_admin(session: Session) -> User:
 def _get_or_create_workspace_with_subscription(
     session: Session, admin: User, *, name: str, tier: str, monthly_report_quota: int
 ) -> None:
-    if session.query(Workspace).filter_by(name=name).one_or_none() is not None:
+    if session.query(Workspace).filter_by(name=name).first() is not None:
         return
     workspace = Workspace(name=name)
     session.add(workspace)

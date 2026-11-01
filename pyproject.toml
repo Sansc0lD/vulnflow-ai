@@ -8,6 +8,13 @@ dependencies = []
 [tool.uv.workspace]
 members = ["apps/api", "apps/cli", "packages/contracts"]
 
+[tool.uv]
+# brotli is a transitive dep (fonttools[woff], pulled in by weasyprint).
+# 1.2.0 has 2 known CVEs (PYSEC-2026-4322, GHSA-9v8h-qqgm-4m35) per
+# pip-audit; force the resolver to the fixed version without adding it as a
+# direct dependency anywhere.
+constraint-dependencies = ["brotli>=1.2.1"]
+
 [dependency-groups]
 dev = [
     "ruff>=0.7.0",
@@ -41,6 +48,19 @@ select = [
 # comments-only-when-non-obvious style, not mandatory docstrings on every
 # function — forcing D here would make ruff fight that convention.
 
+[tool.ruff.lint.flake8-bugbear]
+# B008 ("no function calls in argument defaults") is a real anti-pattern in
+# general, but FastAPI's entire DI system is built on `Depends(...)` (and
+# this project's own RBAC factory `require_workspace_role(...)`) being used
+# exactly as a default value — that is the required, idiomatic FastAPI
+# pattern (FASE 4+), not a bug to fix.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.params.Depends",
+    "fastapi.security.HTTPBearer",
+    "app.core.dependencies.require_workspace_role",
+]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
@@ -70,6 +90,7 @@ addopts = "-ra -q --strict-markers"
 testpaths = ["tests"]
 markers = [
     "resilience: EC-01..EC-18 resilience/edge-case tests (FASE 7.2)",
+    "postgres: needs a real PostgreSQL via TEST_DATABASE_URL (skipped otherwise)",
 ]
 
 [tool.coverage.run]

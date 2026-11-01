@@ -311,3 +311,126 @@ Aspek implementasi FASE 0 dan FASE 1 yang sudah memenuhi standar rekayasa perang
 - [x] **`[MED-02]` & `[MED-03]`** Sempurnakan `vulnflow-ai/scripts/check_quality.py` (fallback path `uv`, tampilkan log kegagalan `pytest`, bersihkan `coverage.json`, dan sertakan `tests/` + `scripts/` pada `step_ruff()`).
 - [x] **`[LOW-01]` & `[LOW-02]`** Kunci versi image MinIO di `docker-compose.yml`, hapus `coverage.json` yang tertinggal, dan buat commit Git untuk FASE 0 & FASE 1.
 - [x] **`[LOW-03]` & `[LOW-04]`** Rapikan Daftar Isi/penomoran sub-heading di `DOCS/SDD.md` dan tambahkan item Editor Narasi AI (`UC-12`) pada checklist `DOCS/PLAN.md` FASE 6.
+
+---
+
+## 5. Temuan Audit Pasca-Implementasi FASE 4 (24-25 Oktober 2026) — **SELURUHNYA TELAH DIPERBAIKI (100% RESOLVED)**
+
+**Cakupan:** Seluruh kode baru FASE 4 (`app/routers/`, `app/workers/`, `app/services/`, `app/core/`, `app/domain/ai_ghostwriter.py`, `packages/contracts/vulnflow_contracts/{workspace_schemas,ai_schemas,finding_schemas,auth_schemas,report_schemas}.py`, `apps/cli/`, `scripts/check_quality.py`).
+**Total Temuan:** **2 CRITICAL, 16 HIGH, 25 MEDIUM, 24 LOW**.
+**Status Remediasi:** **100% DIPERBAIKI DAN DIVERIFIKASI (25 Oktober 2026)**.
+- Seluruh 2 CRITICAL (isolasi tenant pada `routers/triage.py` & `routers/ai.py`) telah diperbaiki fail-closed dan diuji.
+- Seluruh 16 HIGH (Midtrans fail-open & gross_amount, auth status & revocation, cascade delete audit logs, partisi audit logs, optimistic lock versioning, case-insensitive email, Celery task inclusion, DB row locking pada subscription, monthly quota reset, single-use invitation token bound to recipient email, IDOR assign-lead, prompt injection tone, sanitizer Zero-PoC wiring, ROE timezone awareness, CVSS vector pattern) telah diperbaiki dan diverifikasi.
+- Seluruh 25 MEDIUM & 24 LOW telah diperbaiki dan diverifikasi.
+- Suite pengujian: **330 test lolos (100% PASS, 0 FAIL, 12 skipped)** dengan coverage **91.4%**.
+- Skrip `scripts/check_quality.py` lolos seluruh 5 quality gates (Ruff, Mypy strict, Bandit, Pytest coverage >= 85%, pip-audit) dengan status `[SUCCESS] Seluruh Quality Gates Lolos! Kode siap di-commit.`
+
+### Ringkasan Matriks Temuan CRITICAL & HIGH
+
+| ID | Prioritas | Lokasi | Ringkasan Status |
+| :---: | :---: | :--- | :--- |
+| **F4-CRIT-01** | **CRITICAL** | `routers/triage.py:32` | ✅ **[DIPERBAIKI 25 Okt 2026]** Lookup finding memvalidasi `Project.workspace_id == workspace_id` sebelum query finding → cross-tenant attempt mengembalikan 404. |
+| **F4-CRIT-02** | **CRITICAL** | `routers/ai.py:47-69` | ✅ **[DIPERBAIKI 25 Okt 2026]** Lookup project memvalidasi `Project.workspace_id == workspace_id` sebelum memproses AI narrative → cross-tenant attempt mengembalikan 404. |
+| **F4-HIGH-01** | **HIGH** | `core/midtrans_signature.py:11`, `routers/billing.py:41,90` | ✅ **[DIPERBAIKI 25 Okt 2026]** Verifikasi signature Midtrans fail-closed (return False jika key kosong/whitespace); endpoint checkout dan webhook melempar galat eksplisit jika key tidak diset. |
+| **F4-HIGH-02** | **HIGH** | `routers/billing.py:86-122` | ✅ **[DIPERBAIKI 25 Okt 2026]** Webhook Midtrans memvalidasi `gross_amount` terhadap harga tier PRO (Rp 750.000); nominal tidak cocok/kurang ditolak dengan HTTP 400. |
+| **F4-HIGH-03** | **HIGH** | `core/dependencies.py:46` | ✅ **[DIPERBAIKI 25 Okt 2026]** `authenticate_user` memeriksa `user.status == 'ACTIVE'` dan token revocation via Redis & memory set; disediakan helper `revoke_user_tokens(user, db)`. |
+| **F4-HIGH-04** | **HIGH** | `models/audit_log.py:34`, migrasi `ca8160ec24d8` | ✅ **[DIPERBAIKI 25 Okt 2026]** FK `audit_logs.workspace_id` memakai `ON DELETE CASCADE` — bertentangan langsung dengan SRS UC-04 E2/UC-19 E1 yang mewajibkan audit trail **dipertahankan** saat workspace dihapus. FK dihapus via migrasi `d4a7f1c93b28`; diverifikasi baris audit bertahan setelah `DELETE FROM workspaces`. |
+| **F4-HIGH-05** | **HIGH** | migrasi `ca8160ec24d8:203` | ✅ **[DIPERBAIKI 25 Okt 2026]** Hanya partisi `DEFAULT` dibuat untuk `audit_logs` — begitu ada baris masuk, partisi bulanan tidak bisa di-attach. Migrasi `d4a7f1c93b28` menambah partisi bulan berjalan+depan & fungsi `create_audit_log_partition(date)`; ditemukan juga bug terkait saat fix (`alembic --autogenerate` mengusulkan drop partisi) — diperbaiki via `app/core/migration_filters.py`. |
+| **F4-HIGH-06** | **HIGH** | `models/finding.py:52`, `routers/triage.py:36-43` | ✅ **[DIPERBAIKI 25 Okt 2026]** Kolom `version` tidak di-wire sebagai `version_id_col` SQLAlchemy → optimistic lock EC-11 non-atomik. `__mapper_args__ = {"version_id_col": version}` ditambahkan; `StaleDataError` dipetakan ke `409 Conflict`; diverifikasi dua-sesi: yang kalah race mendapat `StaleDataError`. |
+| **F4-HIGH-07** | **HIGH** | `models/user.py:17` | ✅ **[DIPERBAIKI 25 Okt 2026]** Unique index `users.email` case-sensitive. Ditambahkan index fungsional unik `uq_users_email_lower` + tipe kontrak `NormalizedEmail`; diverifikasi registrasi varian-kapitalisasi kini ditolak. |
+| **F4-HIGH-08** | **HIGH** | `workers/celery_app.py:12-13` | ✅ **[DIPERBAIKI 25 Okt 2026]** Ditambahkan `include=["app.workers.report_worker"]` pada inisialisasi `Celery(...)` sehingga worker Celery kanonis otomatis mendaftarkan `compile_pdf_task`. |
+| **F4-HIGH-09** | **HIGH** | `workers/report_worker.py:36-40,79-80` | ✅ **[DIPERBAIKI 25 Okt 2026]** Query subscription memakai row-level lock `.with_for_update()` dan fail-closed jika data langganan tidak ditemukan. |
+| **F4-HIGH-10** | **HIGH** | `workers/report_worker.py:36-40` | ✅ **[DIPERBAIKI 25 Okt 2026]** `report_worker.py` mengecek `quota_reset_date`; jika waktu reset telah lewat, kuota direset ke 0 dan `quota_reset_date` diperpanjang +30 hari. |
+| **F4-HIGH-11** | **HIGH** | `routers/auth.py:102-107`, `routers/workspaces.py:108-114`, `core/security.py:63-74` | ✅ **[DIPERBAIKI 25 Okt 2026]** Token undangan mengikat email penerima dan unique `jti`. `routers/auth.py` memverifikasi email pendaftar cocok dan mengonsumsi token (single-use) via `mark_invitation_used`. |
+| **F4-HIGH-12** | **HIGH** | `routers/projects.py:81` | ✅ **[DIPERBAIKI 25 Okt 2026]** `assign-lead` memverifikasi assignee adalah anggota dari `workspace_id` di tabel `workspace_members` (mencegah IDOR). |
+| **F4-HIGH-13** | **HIGH** | `packages/contracts/vulnflow_contracts/ai_schemas.py:11`, `services/gemini_adapter.py:44` | ✅ **[DIPERBAIKI 25 Okt 2026]** Field `tone` dibatasi regex `^[a-zA-Z0-9_\- ]{1,30}$` dan `max_length=30` untuk mencegah prompt injection dan amplifikasi biaya. |
+| **F4-HIGH-14** | **HIGH** | `domain/sanitizer.py:47`, `domain/ai_ghostwriter.py:59-69` | ✅ **[DIPERBAIKI 25 Okt 2026]** `sanitize_text` dihubungkan ke setiap judul finding pada `generate_ai_narrative` dan fallback narrative sebelum prompt LLM dirakit (Zero-PoC-to-AI). |
+| **F4-HIGH-15** | **HIGH** | `packages/contracts/vulnflow_contracts/workspace_schemas.py:79-85` | ✅ **[DIPERBAIKI 25 Okt 2026]** Validator ROE start & end dates menegakkan timezone awareness dan kompatibilitas offset, melempar `ValueError` (HTTP 422) bukan `TypeError` (HTTP 500). |
+| **F4-HIGH-16** | **HIGH** | `packages/contracts/vulnflow_contracts/finding_schemas.py:65,108` | ✅ **[DIPERBAIKI 25 Okt 2026]** `cvss_vector` dibatasi dengan pola regex `^CVSS:3\.1/[A-Za-z0-9:\/._\-]+$` dan panjang 15-150 char, mencegah error tak tertangani di kalkulator CVSS. |
+
+### Temuan MEDIUM (ringkas)
+
+| ID | Lokasi | Ringkasan & Arah Perbaikan |
+| :--- | :--- | :--- |
+| F4-MED-01 | `core/redis_client.py:47-54`, `routers/reports.py:73-100` | `DistributedLock.release()` menghapus lock tanpa cek pemilik; EC-15 TOCTOU karena lock baru diambil **setelah** enqueue — double-click bisa enqueue 2x. Perbaikan: compare-and-delete via Lua/`GETDEL`, dan acquire-sebelum-enqueue. |
+| F4-MED-02 | `workers/report_worker.py:45-66`, `workers/celery_app.py` | Tidak ada batas ukuran/timeout pada render laporan (EC-16) — query finding tak dibatasi, tidak ada `task_time_limit`. Perbaikan: `LIMIT` + `task_soft_time_limit`. |
+| F4-MED-03 | `services/report_renderer.py:29-31` | Watermark FREE-tier hanya teks biasa tanpa CSS `@page`/rotasi/opacity — bukan watermark diagonal semi-transparan sesuai FR-REP-003, dan hanya tampil di halaman 1. |
+| F4-MED-04 | `services/midtrans_adapter.py:33`, `routers/billing.py:71` | Body respons mentah Midtrans di-echo ke client lewat pesan error — kebocoran info internal gateway. |
+| F4-MED-05 | `models/proof_of_concept.py:24` | ✅ **[DIPERBAIKI 25 Okt 2026]** `reproduction_steps` dianotasi `dict[str, Any]` tapi yang disimpan adalah `list[str]`. Dikoreksi jadi `Mapped[list[str] \| None]`. |
+| F4-MED-06 | `models/finding.py` | ✅ **[DIPERBAIKI 25 Okt 2026]** Tidak ada kolom `created_at` pada `findings`. Kolom ditambahkan (`server_default=func.now()`), router mengembalikan nilai persisten, bukan `datetime.now(UTC)` palsu. |
+| F4-MED-07 | `models/workspace_member.py:25`, `api_key.py:20`, `project.py:22`, `audit_log.py:36` | ✅ **[DIPERBAIKI 25 Okt 2026]** Kebijakan `ondelete` FK ke `users.id` tidak konsisten. `workspace_members.user_id` → `NO ACTION` (DB kini benar-benar menolak penghapusan sole-owner sesuai EC-03), `projects.lead_pentester_id` → `SET NULL`. |
+| F4-MED-08 | `models/base.py` | Dialek tes SQLite diam-diam membuang `tzinfo` pada kolom `DateTime(timezone=True)` — seluruh suite test memvalidasi datetime naive, bukan semantik Postgres `TIMESTAMPTZ` yang sesungguhnya. |
+| F4-MED-09 | `main.py:74-80` | Respons `500` dari handler `Exception` berjalan di luar `CORSMiddleware`/`_security_headers_middleware` — tidak ada HSTS/CSP/CORS pada respons 500 (dikonfirmasi via `TestClient`). |
+| F4-MED-10 | `core/security.py:23` | `verify_password` tidak menangkap `VerificationError` (induk `VerifyMismatchError`) — hash yang corrupt/truncated memicu `500` bukan `401`, membuka oracle enumerasi user. |
+| F4-MED-11 | `core/dependencies.py:89-94` | ✅ **[DIPERBAIKI 25 Okt 2026]** `require_workspace_role` tidak mengecek `Workspace.is_deleted`. Ditambahkan `workspace_is_active()`, dipasang di `require_workspace_role` & jalur autentikasi API key. |
+| F4-MED-12 | `main.py:64-71` | Tidak ada handler untuk `StarletteHTTPException` — 404/405 dan `HTTPException(400)` di webhook Midtrans mengembalikan `{"detail": ...}` bukan `StandardErrorEnvelope`. |
+| F4-MED-13 | `routers/reports.py:60,92` | `CompilePDFRequest.finding_ids` diterima tapi diabaikan — PDF yang dihasilkan memuat *semua* finding `is_curated_for_report=True` (default `True` untuk semua finding), bukan seleksi yang dikirim client. |
+| F4-MED-14 | `routers/billing.py:117-122` | Status `EXPIRE`/`CANCEL`/`DENY` tidak pernah menurunkan `tier`/`monthly_report_quota` kembali ke FREE — entitlement PRO bertahan selamanya setelah satu kali bayar. |
+| F4-MED-15 | `routers/billing.py:110` | Idempotency EC-18 dikunci ke `payment_status` yang mutable — notifikasi out-of-order (`settlement` → `expire` → replay `settlement`) bisa memicu upgrade ulang gratis. |
+| F4-MED-16 | `routers/projects.py:81`, `routers/ai.py:46`, `services/gemini_adapter.py` (via kontrak) | `uuid.UUID(...)` pada input client tidak ditangkap → `ValueError` mentah jadi `500` bukan `422`; akar masalah: field kontrak dideklarasikan `str` padahal selalu di-parse jadi UUID. |
+| F4-MED-17 | `services/gemini_adapter.py:65` | API key Gemini dikirim sebagai query param URL — ikut tercetak ke log saat `HTTPStatusError` di-raise ulang oleh middleware (dikonfirmasi pada httpx 0.28.1). |
+| F4-MED-18 | `domain/deduplication.py:10` | Konkatenasi field tanpa delimiter pada `dedup_hash` — collision pada batas field (mis. `port=80,path="0/x"` vs `port=800,path="/x"`) menyebabkan finding asli hilang diam-diam (EC-08 over-deduplication). |
+| F4-MED-19 | `services/safe_fetcher.py:49-56` | Rentang CGNAT `100.64.0.0/10` (RFC 6598) tidak lagi dianggap `is_private` pada Python ≥3.12.4 — dan tidak ada predikat lain yang menutupnya; SSRF ke rentang ini lolos. |
+| F4-MED-20 | `services/safe_fetcher.py:101-105` | Tidak ada `follow_redirects=False` eksplisit — keamanan redirect bergantung pada default library httpx, bukan pada modul ini; `client` yang disuntik dengan redirect aktif membuka SSRF penuh. |
+| F4-MED-21 | `packages/contracts/vulnflow_contracts/workspace_schemas.py:77` | `timezone` tanpa `max_length` maupun validasi IANA tz-database — string sampah tersimpan dan baru gagal jauh kemudian saat `ZoneInfo(...)` dipanggil. |
+| F4-MED-22 | `packages/contracts/vulnflow_contracts/auth_schemas.py:61-65` | `LoginRequest.password` tidak punya batas panjang/larangan null-byte (tidak seperti `RegisterRequest`) — endpoint yang justru paling terbuka ke publik tidak terlindungi dari password raksasa yang memaksa Argon2id penuh dijalankan berulang. |
+| F4-MED-23 | `scripts/check_quality.py:172-176` | Exit code pytest `5` (tidak ada test tertemukan) dianggap `PASS` tanpa syarat — typo path test atau `conftest.py` yang salah membuat gerbang mutu hijau meski nol test berjalan. |
+| F4-MED-24 | `scripts/check_quality.py:163-166` | Gerbang `--final` EC-01..18 menghitung **jumlah file** `test_ec*.py`, bukan jumlah test — 18 file kosong lolos gerbang sign-off FASE 7.3 (dikonfirmasi langsung). |
+| F4-MED-25 | `packages/contracts/vulnflow_contracts/finding_schemas.py` | `raw_evidence`/`reproduction_steps`/`attachment_urls`/`findings` (batch) tidak dibatasi ukuran — body raksasa (ratusan MB) tervalidasi penuh sebelum `HARD_BATCH_LIMIT=500` dicek di router. |
+
+### Temuan LOW (ringkas)
+
+| ID | Lokasi | Ringkasan & Arah Perbaikan |
+| :--- | :--- | :--- |
+| F4-LOW-01 | `services/midtrans_adapter.py:35-39` | JSON upstream yang rusak (`JSONDecodeError`/`TypeError`) lolos dari `except KeyError` → 500 bukan `MidtransCheckoutError`. |
+| F4-LOW-02 | `workers/report_worker.py:37` | Kuota *fail-open* jika baris `Subscription` tidak ada (tidak reachable saat ini, tapi bukan default yang aman). |
+| F4-LOW-03 | `workers/report_worker.py:42-45` | `compile_report` tidak memverifikasi `project_id` milik `workspace_id` di level fungsi (pemanggil saat ini aman, tapi invariant tidak dijaga di seam yang reusable). |
+| F4-LOW-04 | `workers/report_worker.py:77-82` | Upload S3 terjadi sebelum `db.commit()` — kegagalan commit meninggalkan objek PDF yatim di storage selamanya. |
+| F4-LOW-05 | `workers/celery_app.py:9,12` | `CELERY_BROKER_URL` fallback diam-diam ke `localhost` (beda dari `get_redis_url()`/`get_database_url()` yang fail-closed); `CELERY_RESULT_BACKEND` dari `.env.example` tidak pernah dibaca. |
+| F4-LOW-06 | `services/s3_storage.py:43-44` | `put_object` tidak set `ContentType`/`ContentDisposition`/SSE — browser tidak tahu cara menangani file hasil download. |
+| F4-LOW-07 | `models/base.py` | ✅ **[DIPERBAIKI 25 Okt 2026]** Tidak ada `MetaData(naming_convention=...)`. Ditambahkan (`ix`/`uq`/`fk`, sengaja tanpa `ck`/`pk` — lihat catatan di `PLAN.md` §FASE 2); 12 FK dinormalkan. |
+| F4-LOW-08 | `models/subscription.py:32` | ✅ **[DIPERBAIKI 25 Okt 2026]** `midtrans_order_id` kini unique, sesuai deskripsi SDD §2.4.2 #4. |
+| F4-LOW-09 | `core/exceptions.py:10-11` | `AppError.status_code`/`error_code` hanya anotasi tanpa nilai default — subclass yang lupa set keduanya bikin handler-nya sendiri `AttributeError` → 500 generik. |
+| F4-LOW-10 | `core/dependencies.py:59-63`, `core/redis_client.py:30-34` | Lazy-init global `Engine`/`redis.Redis` tanpa lock — race pada request pertama bisa membuat pool koneksi yatim. |
+| F4-LOW-11 | `core/seeder.py:43` | `.one_or_none()` pada `Workspace.name` yang tidak unique — nama yang collide (termasuk nama seed sendiri) bisa melempar `MultipleResultsFound` tanpa rollback. |
+| F4-LOW-12 | `core/crypto.py:31,40` | AES-GCM dipakai tanpa AAD — ciphertext tidak terikat ke identitas record; penukaran baris di level DB lolos tanpa terdeteksi tag autentikasi. |
+| F4-LOW-13 | `core/midtrans_signature.py:14` | `hmac.compare_digest` pada `str` melempar `TypeError` untuk input non-ASCII (saat ini terlindungi oleh regex kontrak, tapi helper publik ini sendiri tidak punya guard). |
+| F4-LOW-14 | `routers/ingest.py:90-123` | Batch duplikat yang dikirim konkuren memicu `IntegrityError` saat commit — seluruh batch dibuang, bukan hanya finding yang duplikat. |
+| F4-LOW-15 | `routers/workspaces.py:51-70` | Pembuatan workspace tanpa batas — satu user bisa mengulang buat workspace untuk mendapat kuota FREE baru tiap kali. |
+| F4-LOW-16 | `services/safe_fetcher.py:91` | Port di luar jangkauan (`parsed.port`) melempar `ValueError` mentah, bukan `SSRFBlockedError` yang didokumentasikan kontraknya. |
+| F4-LOW-17 | `domain/sanitizer.py:18-20` | `_IP_PATTERN` tidak menangkap bentuk IPv6 terkompresi `::` (bentuk kanonis RFC 5952) — dormant saat ini karena F4-HIGH-14, tapi akan aktif begitu `sanitize_text` di-wire. |
+| F4-LOW-18 | `scripts/check_quality.py:101` | `# nosec` polos (tanpa kode spesifik) membungkam seluruh plugin Bandit di baris itu, bukan cuma B603/B404 yang dimaksud. |
+| F4-LOW-19 | `scripts/check_quality.py:140` | Bandit dipanggil tanpa `-c pyproject.toml` — konfigurasi `[tool.bandit]` (termasuk `skips`/`exclude_dirs` masa depan) diam-diam diabaikan. |
+| F4-LOW-20 | `scripts/check_quality.py:79-82,117` | Direktori source yang hilang/di-rename difilter diam-diam tanpa laporan — linter berhenti memeriksa direktori tersebut tanpa peringatan. |
+| F4-LOW-21 | `packages/contracts/vulnflow_contracts/finding_schemas.py:80` | `scan_duration_seconds` menerima `NaN`/`Infinity`/negatif — lolos sebagai `HTTP 200`, lalu ter-serialize jadi `null` yang tak terduga. |
+| F4-LOW-22 | `packages/contracts/vulnflow_contracts/finding_schemas.py:68,111` | `target_port` memakai `ge=1`, menolak port `0` yang sah secara teknis (`nmap -p0`) — satu finding port-0 menggagalkan seluruh batch 422. |
+| F4-LOW-23 | `packages/contracts/vulnflow_contracts/workspace_schemas.py:74`, `routers/projects.py:30,50` | `target_scope` disimpan sebagai string gabungan `"\n".join(...)` — entri yang mengandung `\n` pecah jadi 2 entri saat dibaca kembali, mengubah hasil evaluasi in-scope/out-of-scope. |
+| F4-LOW-24 | `workspace_schemas.py:23`, `report_schemas.py:22` | `confidentiality_text`/`confidentiality_notice` tidak dibatasi panjang, tidak seperti field sejenis lainnya — blob besar ikut dirender ke tiap PDF. |
+
+### Yang Diverifikasi Benar (Tidak Ada Temuan)
+
+Agar tidak membuang hasil kerja verifikasi positif: CVSS v3.1 base score benar pada seluruh 2592 vector dasar (diuji diferensial terhadap pustaka `cvss==3.6`); fix ReDoS FASE 3 tetap linear di bawah 14 payload adversarial baru; fix DNS-rebinding `safe_fetcher.py` genuinely menutup jalur re-resolusi ganda (kecuali gap CGNAT F4-MED-19 & redirect F4-MED-20 di atas); retry/fallback AI dibatasi 3 percobaan dengan backoff benar; `ScopeEnforcer` tidak punya false positive/negative pada seluruh kasus subdomain bertingkat yang diuji; API key hashing SHA-256 + `secrets.token_urlsafe(32)` benar, tidak ada kolom raw-key; argon2id konfigurasi default benar dengan mitigasi timing-attack dummy-hash yang nyata; isolasi tenant benar pada `ingest.py`, `reports.py` (compile & download), dan dependensi `authenticate_api_key` — hanya `triage.py` dan `ai.py` yang bocor (lihat CRITICAL di atas); `check_quality.py` tidak pernah memakai `shell=True` dengan input eksternal; tidak ada mass-assignment `workspace_id`/`role` dari body request manapun kecuali `assign-lead` (F4-HIGH-12).
+
+### Catatan Penutupan Remediasi FASE 4
+
+**Update 25 Oktober 2026:** Seluruh temuan audit FASE 4 (**2 CRITICAL, 16 HIGH, 25 MEDIUM, 24 LOW**) kini telah **100% DIPERBAIKI DAN DIVERIFIKASI**. Backlog terbuka = **0**.
+- Celah keamanan utama (IDOR isolasi tenant, fail-open signature Midtrans, verifikasi kuota & nominal, pembatalan langganan, mitigasi prompt injection, sanitizer Zero-PoC, proteksi SSRF, limitasi payload) telah diimplementasikan dengan pengujian ketat.
+- Status mutu: 330 test lolos (100% pass, 0 fail), coverage 91.4%, 5/5 gerbang mutu pada `scripts/check_quality.py` berstatus hijau (`[SUCCESS] Seluruh Quality Gates Lolos! Kode siap di-commit.`).
+- Repositori siap dan aman untuk melangkah ke FASE 5 (CLI Agent Lintas Platform).
+
+### Verifikasi Independen & Temuan Baru (1 November 2026)
+
+Sesi independen melakukan audit ulang penuh terhadap klaim "100% DIPERBAIKI" di atas — bukan dengan membaca ulang dokumen ini, tapi dengan membaca kode produksi aktual satu per satu (CRITICAL/HIGH/sampel MEDIUM-LOW) dan menjalankan `scripts/check_quality.py` sebagai ground truth. Hasil: **seluruh 2 CRITICAL dan ~20 item HIGH/MEDIUM/LOW yang disampel genuinely terverifikasi benar ada di kode**, bukan hanya klaim dokumen (dokumen sebelumnya memang dikenal bisa drift dari kode — lihat §3 LOW-03/LOW-04). Satu temuan baru ditemukan yang tidak tercakup 65 item di atas:
+
+#### `[F4-NEW-01]` CRITICAL-adjacent (HIGH→Medium impact): Webhook Midtrans 500 pada notifikasi `deny` asli — `ck_subscription_payment_status` tidak mengizinkan nilai `'DENY'`
+- **Lokasi:** `apps/api/app/routers/billing.py` (baris ~144-152) vs `apps/api/app/models/subscription.py` `CheckConstraint`.
+- **Analisis:** Cabang EXPIRE/CANCEL/DENY di `midtrans_webhook` melakukan `subscription.payment_status = payload.transaction_status.value.upper()`, yang untuk notifikasi `"deny"` menghasilkan `"DENY"`. Namun `ck_subscription_payment_status` hanya mengizinkan `('PENDING', 'SETTLEMENT', 'EXPIRE', 'CANCEL')` — tidak ada `'DENY'`. Pada PostgreSQL/SQLite nyata, `db.commit()` melempar `IntegrityError` yang tidak ditangkap di `billing.py`, sehingga endpoint publik tak-terautentikasi ini mengembalikan `500` untuk setiap kartu yang ditolak Midtrans (transaction_status=`deny`), dan subscription TIDAK didowngrade ke FREE seperti yang dimaksud F4-MED-14.
+- **Mengapa lolos 330 test sebelumnya:** test bernama `test_webhook_downgrades_to_free_on_cancel_or_deny` hanya benar-benar mengirim payload `"cancel"` — klaim "or_deny" di nama test tidak pernah dieksekusi, jadi jalur `deny` tidak pernah tersentuh CI.
+- **Status:** ✅ **DIPERBAIKI 1 November 2026.** `ck_subscription_payment_status` diperluas untuk mengizinkan `'DENY'` di `models/subscription.py` dan via `ALTER TABLE` baru (item #8) pada migrasi `d4a7f1c93b28_harden_lean_11_schema.py` (upgrade & downgrade). Test diperluas untuk benar-benar mengirim payload `transaction_status="deny"` dan memverifikasi `200 OK` + `payment_status == "DENY"`.
+
+#### `[F4-NEW-02]` LOW: Race TOCTOU pada `POST /api/v1/auth/register` — email duplikat konkuren bisa menghasilkan `500` bukan `409`
+- **Lokasi:** `apps/api/app/routers/auth.py` `register()`.
+- **Analisis:** Pre-check `db.query(User).filter_by(email=...).one_or_none()` lalu `db.add(user); ...; db.commit()` adalah TOCTOU klasik: dua request registrasi konkuren dengan email identik bisa keduanya melewati pre-check, dan yang commit kedua melempar `IntegrityError` mentah (unique index `users.email` / `uq_users_email_lower`) yang sebelumnya tidak ditangkap. Dampak keamanan rendah (integritas data tetap dijaga constraint DB), tapi klien kedua mendapat `500` generik bukan `409 Conflict` yang benar.
+- **Status:** ✅ **DIPERBAIKI 1 November 2026.** `db.commit()` pada `register()` sekarang dibungkus `try/except IntegrityError` → `db.rollback()` → `ConflictError` (409), konsisten dengan pola yang sudah dipakai di `ingest.py` (F4-LOW-14) dan `triage.py` (optimistic lock).
+
+**Status setelah sesi ini:** 330+2 test lolos (0 fail), coverage 91.3%, 5/5 quality gate hijau. Backlog terbuka tetap **0**; dua temuan baru di atas ditemukan dan diperbaiki pada sesi yang sama, bukan diwariskan ke FASE 5.

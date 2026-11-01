@@ -28,3 +28,19 @@ def test_user_email_must_be_unique(session: Session) -> None:
 
     with pytest.raises(IntegrityError):
         session.commit()
+
+
+def test_user_email_is_unique_case_insensitively(session: Session) -> None:
+    """One mailbox, one account.
+
+    PostgreSQL string equality is case-sensitive, so a plain unique index on
+    `email` happily accepted both casings: two accounts for the same human,
+    with login succeeding or failing depending on what was typed. Enforced by
+    the `uq_users_email_lower` functional index.
+    """
+    session.add(User(email="alice@corp.com", password_hash="h1", full_name="A"))
+    session.commit()
+    session.add(User(email="Alice@Corp.com", password_hash="h2", full_name="A again"))
+
+    with pytest.raises(IntegrityError):
+        session.commit()

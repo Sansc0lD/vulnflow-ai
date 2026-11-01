@@ -37,10 +37,11 @@ import zipfile
 import tarfile
 from pathlib import Path
 
+
 def resolve_target_environment() -> dict:
     os_raw = platform.system().lower()
     arch_raw = platform.machine().lower()
-    
+
     # Normalisasi Sistem Operasi
     if "windows" in os_raw:
         os_tag = "windows"
@@ -54,7 +55,7 @@ def resolve_target_environment() -> dict:
         os_tag = "linux"
         ext = ".zip"
         binary_name = "nuclei"
-        
+
     # Normalisasi Arsitektur CPU
     if arch_raw in ["amd64", "x86_64"]:
         arch_tag = "amd64"
@@ -62,33 +63,34 @@ def resolve_target_environment() -> dict:
         arch_tag = "arm64"
     else:
         arch_tag = "386"
-        
+
     return {
         "os": os_tag,
         "arch": arch_tag,
         "extension": ext,
         "binary_name": binary_name,
-        "download_url": f"https://github.com/projectdiscovery/nuclei/releases/latest/download/nuclei_{os_tag}_{arch_tag}{ext}"
+        "download_url": f"https://github.com/projectdiscovery/nuclei/releases/latest/download/nuclei_{os_tag}_{arch_tag}{ext}",
     }
+
 
 def ensure_tools_installed() -> Path:
     install_dir = Path.home() / ".vulnflow" / "bin"
     install_dir.mkdir(parents=True, exist_ok=True)
     env_info = resolve_target_environment()
     target_binary = install_dir / env_info["binary_name"]
-    
+
     if not target_binary.exists():
         archive_path = install_dir / f"nuclei_temp{env_info['extension']}"
         urllib.request.urlretrieve(env_info["download_url"], archive_path)
-        with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+        with zipfile.ZipFile(archive_path, "r") as zip_ref:
             zip_ref.extract(env_info["binary_name"], install_dir)
         archive_path.unlink()
-        
+
         # Pasang izin eksekusi (chmod +x) pada Linux/macOS
         if env_info["os"] != "windows":
             st = os.stat(target_binary)
             os.chmod(target_binary, st.st_mode | stat.S_IEXEC)
-            
+
     return target_binary
 ```
 
@@ -156,6 +158,7 @@ Backend secara otomatis memeriksa setiap temuan yang diunggah terhadap daftar `t
 import json
 from typing import Generator
 
+
 def parse_nuclei_stream(file_path: str) -> Generator[dict, None, None]:
     """
     Mendukung berkas JSON utuh maupun format JSON Lines (NDJSON) yang terpotong.
@@ -171,8 +174,8 @@ def parse_nuclei_stream(file_path: str) -> Generator[dict, None, None]:
                     yield item
                 return
             except json.JSONDecodeError:
-                pass # Lanjutkan ke fallback streaming baris per baris
-        
+                pass  # Lanjutkan ke fallback streaming baris per baris
+
         # Fallback: Streaming baris per baris (JSONL / Interrupted File)
         f.seek(0)
         for line_num, line in enumerate(f, 1):
@@ -184,7 +187,7 @@ def parse_nuclei_stream(file_path: str) -> Generator[dict, None, None]:
             try:
                 yield json.loads(line_str)
             except json.JSONDecodeError:
-                continue # Lewati baris yang korup di ujung berkas
+                continue  # Lewati baris yang korup di ujung berkas
 ```
 
 ### 5.2 Penanganan Kasus EC-08: Formula Hash Deduplikasi Presisi
@@ -192,7 +195,10 @@ def parse_nuclei_stream(file_path: str) -> Generator[dict, None, None]:
 # apps/api/domain/deduplication.py
 import hashlib
 
-def compute_dedup_hash(project_id: str, cwe_id: str, host: str, port: int | None, path: str = "") -> str:
+
+def compute_dedup_hash(
+    project_id: str, cwe_id: str, host: str, port: int | None, path: str = ""
+) -> str:
     """
     Menghasilkan hash deterministik unik per endpoint celah.
     Mencegah bug over-deduplication jika celah sama ada di dua path berbeda.
@@ -211,7 +217,10 @@ from redis import Redis
 
 router = APIRouter()
 
-@router.post("/workspaces/{w_id}/projects/{p_id}/reports/compile-pdf", status_code=status.HTTP_202_ACCEPTED)
+
+@router.post(
+    "/workspaces/{w_id}/projects/{p_id}/reports/compile-pdf", status_code=status.HTTP_202_ACCEPTED
+)
 def compile_pdf(w_id: str, p_id: str, redis: Redis, db_session):
     lock_key = f"lock:report:{w_id}:{p_id}"
     # Dapatkan lock terdistribusi 10 detik untuk mencegah race condition double click
@@ -225,17 +234,22 @@ def compile_pdf(w_id: str, p_id: str, redis: Redis, db_session):
                 "message": "Pekerjaan sedang berjalan",
                 "status_url": f"/api/v1/workspaces/{w_id}/reports/jobs/{existing_job_id.decode()}",
             }
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Permintaan kompilasi sedang diproses")
-        
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Permintaan kompilasi sedang diproses",
+        )
+
     # Validasi dan inkrementasi kuota
     sub = db_session.query(Subscription).filter_by(workspace_id=w_id).with_for_update().first()
     if sub.reports_used_this_month >= sub.monthly_report_quota:
         redis.delete(lock_key)
-        raise HTTPException(status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Kuota laporan bulanan telah habis")
-        
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED, detail="Kuota laporan bulanan telah habis"
+        )
+
     sub.reports_used_this_month += 1
     db_session.commit()
-    
+
     # Enqueue Celery task
     task = render_pdf_task.delay(w_id, p_id)
     redis.set(f"active_job:{w_id}:{p_id}", task.id, ex=300)
@@ -273,12 +287,12 @@ def download_report_proxy(w_id: str, report_id: str, current_user, s3_client, db
     report = db_session.query(Report).filter_by(id=report_id).first()
     if not report:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Laporan tidak ditemukan")
-        
+
     # Terbitkan presigned URL segar yang berlaku 15 menit
     fresh_presigned_url = s3_client.generate_presigned_url(
-        'get_object',
-        Params={'Bucket': 'vulnflow-reports', 'Key': report.storage_path},
-        ExpiresIn=900
+        "get_object",
+        Params={"Bucket": "vulnflow-reports", "Key": report.storage_path},
+        ExpiresIn=900,
     )
     # Redirect otomatis browser pengguna ke URL segar
     return RedirectResponse(url=fresh_presigned_url, status_code=status.HTTP_307_TEMPORARY_REDIRECT)
@@ -290,6 +304,7 @@ Untuk berkas pemindaian raksasa (> 200 MB) yang dipecah CLI menjadi beberapa fra
 ```python
 # apps/cli/services/ingest_client.py
 import hashlib
+
 
 def compute_idempotency_key(file_hash: str, chunk_index: int | None = None) -> str:
     """

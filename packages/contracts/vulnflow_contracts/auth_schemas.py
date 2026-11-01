@@ -2,8 +2,22 @@
 
 import re
 from enum import StrEnum
+from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+NormalizedEmail = Annotated[EmailStr, AfterValidator(str.lower)]
+"""Email lowercased before it ever reaches the database.
+
+`EmailStr` only normalizes the domain, so 'Alice@corp.com' survives validation
+unchanged and — because PostgreSQL string equality is case-sensitive — used to
+produce a second account for the same mailbox, with login succeeding or failing
+depending on the casing typed. Local-parts are technically case-sensitive per
+RFC 5321, but no mail provider this product targets treats them that way, and
+`users.email` is the identity key for login, invitations and password reset.
+Paired with the `uq_users_email_lower` index in the database, which enforces
+the same invariant for any writer that bypasses this contract.
+"""
 
 _PASSWORD_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"[A-Z]"), "harus memuat minimal satu huruf besar"),
@@ -33,6 +47,15 @@ def _validate_password_complexity(password: str) -> str:
     return password
 
 
+def _validate_login_password(password: str) -> str:
+    """F4-MED-22: batasi panjang password login & larang null byte untuk anti-DoS."""
+    if "\0" in password:
+        raise ValueError("kata sandi tidak boleh memuat karakter null byte")
+    if len(password) > 128:
+        raise ValueError("kata sandi maksimal 128 karakter")
+    return password
+
+
 class WorkspaceRole(StrEnum):
     """SDD §2.4.2 Tabel 3 `workspace_members.role` — SRS UC-01 step 4c & UC-05.
 
@@ -49,7 +72,7 @@ class WorkspaceRole(StrEnum):
 class RegisterRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    email: EmailStr
+    email: NormalizedEmail
     password: str
     full_name: str = Field(min_length=1, max_length=100)
     workspace_name: str = Field(min_length=1, max_length=150)
@@ -61,8 +84,10 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    email: EmailStr
-    password: str
+    email: NormalizedEmail
+    password: str = Field(max_length=128)
+
+    _validate_password = field_validator("password")(_validate_login_password)
 
 
 class UserDTO(BaseModel):

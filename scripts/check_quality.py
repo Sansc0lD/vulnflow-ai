@@ -23,7 +23,7 @@ import argparse
 import json
 import os
 import shutil
-import subprocess  # nosec B404: this script's entire job is shelling out to uv/ruff/mypy/etc.
+import subprocess  # nosec: B404
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -73,9 +73,11 @@ APP_SOURCE_DIRS = [
 SELF_CHECK_DIRS = ["scripts"]
 LINT_ONLY_DIRS = ["tests"]
 
-# Only directories that actually exist are passed to each tool, so a FASE 0
-# run (no .py files yet beyond __init__.py stubs) still completes cleanly
-# instead of erroring on an empty/placeholder codebase.
+# F4-LOW-20: Peringatkan jika ada direktori sumber yang diharapkan tidak ditemukan
+_missing_app_dirs = [d for d in APP_SOURCE_DIRS if not (ROOT / d).is_dir()]
+if _missing_app_dirs:
+    print(f"[WARN] Direktori aplikasi tidak ditemukan: {', '.join(_missing_app_dirs)}")
+
 EXISTING_SOURCE_DIRS = [d for d in APP_SOURCE_DIRS + SELF_CHECK_DIRS if (ROOT / d).is_dir()]
 EXISTING_RUFF_DIRS = [
     d for d in APP_SOURCE_DIRS + SELF_CHECK_DIRS + LINT_ONLY_DIRS if (ROOT / d).is_dir()
@@ -96,9 +98,8 @@ class StepResult:
 
 def run(cmd: list[str]) -> tuple[int, str]:
     """Run a command via `uv run`, returning (exit_code, combined_output)."""
-    # nosec B603/B404: fixed argv list (never shell=True), cmd always built
-    # from static lists in this file — never from user/network input.
-    proc = subprocess.run(  # nosec
+    # F4-LOW-18: nosec dengan identifier spesifik B603, B404
+    proc = subprocess.run(  # nosec: B603, B404
         [UV_PATH, "run", *cmd],
         cwd=ROOT,
         capture_output=True,
@@ -114,7 +115,7 @@ def _run_lint_tool(name: str, dirs: list[str], *commands: list[str]) -> StepResu
     Skips entirely (reported as passing) until there's anything to check.
     """
     if not dirs:
-        return StepResult(name, True, "(belum ada source dir)")
+        return StepResult(name, False, "(tidak ada direktori yang ditemukan untuk diperiksa)")
     outputs = []
     for cmd in commands:
         code, out = run([*cmd, *dirs])
@@ -137,7 +138,12 @@ def step_mypy() -> StepResult:
 
 
 def step_bandit() -> StepResult:
-    return _run_lint_tool("Bandit Security SAST", EXISTING_SOURCE_DIRS, ["bandit", "-q", "-r"])
+    # F4-LOW-19: Sertakan -c pyproject.toml agar konfigurasi bandit terbaca
+    return _run_lint_tool(
+        "Bandit Security SAST",
+        EXISTING_SOURCE_DIRS,
+        ["bandit", "-c", "pyproject.toml", "-q", "-r"],
+    )
 
 
 def _run_pytest_with_coverage() -> tuple[int, str, float | None]:
@@ -161,18 +167,24 @@ def _read_coverage_pct() -> float | None:
 
 
 def _count_resilience_tests() -> int:
+    # F4-MED-24: Hitung jumlah item test aktual yang dikumpulkan oleh pytest
     if not RESILIENCE_TEST_DIR.is_dir():
         return 0
-    return len(list(RESILIENCE_TEST_DIR.glob("test_ec*.py")))
+    code, out = run(["pytest", "--collect-only", "-q", str(RESILIENCE_TEST_DIR)])
+    if code != 0:
+        return 0
+    return len([line for line in out.splitlines() if "::" in line])
 
 
 def _evaluate_proportional(
     exit_code: int, pytest_output: str, coverage_pct: float | None
 ) -> StepResult:
-    no_tests_collected = exit_code == 5  # pytest's code for "no tests collected"
-    if no_tests_collected:
+    # F4-MED-23: Exit code 5 (tidak ada test terkumpul) adalah error/kegagalan
+    if exit_code == 5:
         return StepResult(
-            "Pytest & Evaluasi Coverage", True, "N/A (belum ada modul untuk fase ini)"
+            "Pytest & Evaluasi Coverage",
+            False,
+            "Tidak ada test yang dikumpulkan (pytest exit code 5). Periksa path test.",
         )
     if exit_code != 0:
         return StepResult("Pytest & Evaluasi Coverage", False, pytest_output[:MAX_DETAIL_CHARS])

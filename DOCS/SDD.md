@@ -294,16 +294,19 @@ Untuk menjamin skalabilitas, kemudahan pengujian unit (*testability*), dan pemel
    from typing import List
    from pydantic import BaseModel
 
+
    class BaseScannerParser(ABC):
        @abstractmethod
        def parse(self, raw_content: bytes) -> List[BaseModel]:
            """Transformasi log mentah ke Unified Vulnerability Schema"""
            pass
 
+
    class NmapXmlParser(BaseScannerParser):
        def parse(self, raw_content: bytes) -> List[BaseModel]:
            # Ekstraksi berbasis SAX XML parsing hemat memori
            return parsed_findings
+
 
    class NucleiJsonParser(BaseScannerParser):
        def parse(self, raw_content: bytes) -> List[BaseModel]:
@@ -883,7 +886,7 @@ Sistem basis data PostgreSQL VulnFlow AI mengimplementasikan **11 entitas tabel 
    - `midtrans_order_id` (VARCHAR(100), Nullable, Index) — Kode referensi order unik Midtrans
    - `payment_type` (VARCHAR(50), Nullable) — Metode bayar: 'qris', 'bank_transfer', 'gopay'
    - `snap_token` (VARCHAR(255), Nullable) — Token transaksi aktif sesi Midtrans Snap
-   - `payment_status` (VARCHAR(30), Default: 'PENDING') — Enum: 'PENDING', 'SETTLEMENT', 'EXPIRE', 'CANCEL'
+   - `payment_status` (VARCHAR(30), Default: 'PENDING') — Enum: 'PENDING', 'SETTLEMENT', 'EXPIRE', 'CANCEL', 'DENY'
 
 5. **Tabel `api_keys`:** Kunci token untuk otentikasi CLI Agent lokal.
    - `id` (UUID, Primary Key)
@@ -1045,21 +1048,24 @@ import urllib.parse
 from weasyprint import default_url_fetcher
 
 BLOCKED_IP_NETWORKS = [
-    ipaddress.ip_network("127.0.0.0/8"),      # Loopback IPv4
-    ipaddress.ip_network("10.0.0.0/8"),       # Private RFC 1918
-    ipaddress.ip_network("172.16.0.0/12"),    # Private RFC 1918
-    ipaddress.ip_network("192.168.0.0/16"),   # Private RFC 1918
-    ipaddress.ip_network("169.254.0.0/16"),   # Cloud Metadata (AWS/GCP/Azure)
-    ipaddress.ip_network("::1/128"),          # IPv6 Loopback
+    ipaddress.ip_network("127.0.0.0/8"),  # Loopback IPv4
+    ipaddress.ip_network("10.0.0.0/8"),  # Private RFC 1918
+    ipaddress.ip_network("172.16.0.0/12"),  # Private RFC 1918
+    ipaddress.ip_network("192.168.0.0/16"),  # Private RFC 1918
+    ipaddress.ip_network("169.254.0.0/16"),  # Cloud Metadata (AWS/GCP/Azure)
+    ipaddress.ip_network("::1/128"),  # IPv6 Loopback
 ]
+
 
 def safe_url_fetcher(url: str, timeout: int = 5, ssl_context=None):
     parsed = urllib.parse.urlsplit(url)
-    
+
     # 1. Tolak protokol berbahaya selain HTTP / HTTPS (Blokir file://, gopher://, php://)
     if parsed.scheme not in ("http", "https"):
-        raise PermissionError(f"Akses skema URI '{parsed.scheme}' diblokir oleh kebijakan keamanan anti-SSRF.")
-    
+        raise PermissionError(
+            f"Akses skema URI '{parsed.scheme}' diblokir oleh kebijakan keamanan anti-SSRF."
+        )
+
     # 2. Resolusi DNS dan validasi alamat IP tujuan
     hostname = parsed.hostname
     if hostname is None:
@@ -1068,6 +1074,7 @@ def safe_url_fetcher(url: str, timeout: int = 5, ssl_context=None):
         target_ip = ipaddress.ip_address(hostname)
     except ValueError:
         import socket
+
         target_ip = ipaddress.ip_address(socket.gethostbyname(hostname))
 
     # NB: properti is_private/is_loopback/is_link_local/is_reserved/is_unspecified
@@ -1076,8 +1083,10 @@ def safe_url_fetcher(url: str, timeout: int = 5, ssl_context=None):
     # keduanya saat FASE 3.6 mengimplementasikan modul ini secara penuh.
     for blocked_net in BLOCKED_IP_NETWORKS:
         if target_ip in blocked_net:
-            raise PermissionError(f"Permintaan ke IP privat/metadata cloud ({target_ip}) diblokir oleh anti-SSRF guard.")
-            
+            raise PermissionError(
+                f"Permintaan ke IP privat/metadata cloud ({target_ip}) diblokir oleh anti-SSRF guard."
+            )
+
     # 3. Lanjutkan fetcher jika lolos audit keamanan
     return default_url_fetcher(url, timeout=timeout, ssl_context=ssl_context)
 ```
@@ -1494,14 +1503,18 @@ def sanitize_for_llm(vulnerability_list: list[dict]) -> list[dict]:
     """
     sanitized_payload = []
     for item in vulnerability_list:
-        sanitized_payload.append({
-            "vulnerability_name": item["title"],
-            "cwe_category": item.get("cwe_id", "UNKNOWN"),
-            "severity_level": item["severity"],
-            "cvss_score": item.get("cvss_score"),
-            "cvss_version": item.get("cvss_version", "3.1"),
-            "attack_surface_type": "Web Application" if item.get("protocol") in ["http", "https"] else "Network Service"
-        })
+        sanitized_payload.append(
+            {
+                "vulnerability_name": item["title"],
+                "cwe_category": item.get("cwe_id", "UNKNOWN"),
+                "severity_level": item["severity"],
+                "cvss_score": item.get("cvss_score"),
+                "cvss_version": item.get("cvss_version", "3.1"),
+                "attack_surface_type": "Web Application"
+                if item.get("protocol") in ["http", "https"]
+                else "Network Service",
+            }
+        )
     return sanitized_payload
 ```
 

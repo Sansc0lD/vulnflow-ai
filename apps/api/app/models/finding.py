@@ -1,9 +1,19 @@
 """Tabel `findings` — SDD §2.4.2 #7."""
 
 import uuid
+from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -50,3 +60,21 @@ class Finding(Base):
     # Target outside project.target_scope (UC-07d / EC-04).
     is_quarantined: Mapped[bool] = mapped_column(default=False, nullable=False)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)  # EC-11
+    # First-seen timestamp. Required by `ManualFindingResponse.created_at` and
+    # by UC-11 retest/regression tracking; without it the API had to invent a
+    # value per request that was never persisted and could never be read back.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    # EC-11 optimistic locking. Comparing `version` in Python before the UPDATE
+    # is not a lock: under PostgreSQL's default READ COMMITTED two concurrent
+    # triage requests both read version=1, both pass the comparison, and the
+    # second UPDATE simply overwrites the first once the row lock is released
+    # (lost update, both callers get HTTP 200). Registering the column as
+    # `version_id_col` makes SQLAlchemy emit
+    #   UPDATE findings SET ... WHERE id = :id AND version = :old_version
+    # and raise StaleDataError when that matches 0 rows, which is the only
+    # thing that actually makes the race impossible. SQLAlchemy also owns the
+    # increment from here on, so callers must NOT bump `version` by hand.
+    __mapper_args__ = {"version_id_col": version}

@@ -19,7 +19,7 @@ class ThemeOptions(BaseModel):
     secondary_color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
     show_cover_page: bool = True
     show_cvss_radar: bool = True
-    confidentiality_notice: str = ""
+    confidentiality_notice: str = Field(default="", max_length=2000)
 
 
 class CompilePDFRequest(BaseModel):

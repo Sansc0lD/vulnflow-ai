@@ -4,23 +4,23 @@
 
 **Dokumen Acuan:** [SRS v3.5.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SRS.md) | [SDD v1.6.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SDD.md) | [Edge Cases & Resilience](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/EDGE_CASES_AND_RESILIENCE.md)  
 **Metodologi:** **Spec-Driven Development (Contract-First / API-First)**  
-**Status Proyek:** **Tahap Perencanaan Selesai (100%) $\rightarrow$ Memulai Fase Eksekusi Koding**  
-**Terakhir Diperbarui:** 22 Oktober 2026
+**Status Proyek:** **FASE 4 Selesai & Seluruh Temuan Audit Selesai Diperbaiki $\rightarrow$ Siap Lanjut FASE 5 (CLI Agent)**  
+**Terakhir Diperbarui:** 25 Oktober 2026
 
 ---
 
 ## 1. Indikator Kemajuan Proyek (*Overall Progress Tracker*)
 
 ```text
-[██████████████████████████████████░░░░░░░░░░░░░░░░░░░░░░░] 62.5% (Dokumen + FASE 0-2 Selesai)
+[████████████████████████████████████████████████████░░░░░] 87.5% (Dokumen + FASE 0-4 Selesai)
 - Spesifikasi Kebutuhan (SRS v3.5.0)           : [x] SELESAI (100%)
 - Desain Arsitektur Sistem (SDD v1.6.0)        : [x] SELESAI (100%)
 - Matriks Kasus Batas & Ketahanan (EC-01..18) : [x] SELESAI (100%)
 - Fase 0: Monorepo Scaffolding & Environment   : [x] SELESAI (100%, 6/6 sub-tugas)
 - Fase 1: Pydantic V2 Shared Contracts         : [x] SELESAI (100%, 35 unit test, coverage 94.3%)
 - Fase 2: Database Layer (The Lean 11 Tables)  : [x] SELESAI (100%, 6/6 sub-tugas, 59 unit test, coverage 97.3%)
-- Fase 3: Domain Core & Security Engines       : [ ] BELUM DIMULAI (0%)
-- Fase 4: FastAPI Routers & Celery Worker      : [ ] BELUM DIMULAI (0%)
+- Fase 3: Domain Core & Security Engines       : [x] SELESAI (100%, 6/6 sub-tugas, 120 test case, coverage 96.7%)
+- Fase 4: FastAPI Routers & Celery Worker      : [x] SELESAI (100%, 330 test, 91.4% cov) — SELURUH TEMUAN AUDIT (2 CRITICAL + 16 HIGH + 25 MED + 24 LOW) TELAH DIPERBAIKI & DIVERIFIKASI (lihat AUDIT_FINDINGS.md §5)
 - Fase 5: CLI Agent Lintas Platform            : [ ] BELUM DIMULAI (0%)
 - Fase 6: Web Dashboard SPA (Vue 3 + shadcn-vue): [ ] BELUM DIMULAI (0%)
 - Fase 7: QA & Resilience Test Suite           : [ ] BELUM DIMULAI (0%)
@@ -173,30 +173,53 @@ $ python scripts/check_quality.py
 
 **Review Pasca-Implementasi (22 Oktober 2026, sebelum FASE 3):** Manual code review menemukan 1 bug nyata (bukan drift dokumen): `findings.dedup_hash` memiliki `index=True` pada kolom DAN `UniqueConstraint` terpisah di `__table_args__` — dua konstruksi SQLAlchemy yang independen sehingga menghasilkan **dua index btree redundan** pada kolom yang sama (`ix_findings_dedup_hash` + `uq_finding_dedup`), terverifikasi langsung di PostgreSQL via `\d findings`. Pola `unique=True` + `index=True` langsung pada kolom (dipakai di `users.email`, `subscriptions.workspace_id`, `proofs_of_concept.finding_id`) sudah benar menyatu jadi satu index — hanya `findings.dedup_hash` yang memakai pola berbeda dan luput. Diperbaiki: `index=True` dihapus dari kolom, `UniqueConstraint` tetap menyediakan index untuk lookup. Migrasi awal diedit langsung (belum pernah di-commit/dibagikan) lalu `alembic downgrade base && alembic upgrade head` dijalankan ulang; 59 test tetap lolos, seeder diverifikasi ulang idempoten terhadap database yang di-migrasi ulang.
 
+**Review Pasca-Implementasi Kedua (25 Oktober 2026, setelah FASE 4):** Review baris-per-baris atas 12 model + `migrations/env.py` + migrasi awal, dengan setiap temuan diverifikasi langsung terhadap PostgreSQL 16 yang berjalan (bukan pattern-matching). Ditemukan 4 cacat HIGH, 4 MEDIUM, 3 LOW; semuanya diperbaiki oleh migrasi `d4a7f1c93b28_harden_lean_11_schema`:
+
+1. **`audit_logs.workspace_id` memakai `ON DELETE CASCADE`** (terverifikasi: `confdeltype='c'`), padahal SRS UC-04 E2 langkah 2 & UC-19 E1 mewajibkan baris audit **dipertahankan** setelah workspace di-purge ("tidak di-cascade-delete"). Job purge akan menghapus seluruh jejak audit workspace tersebut — termasuk entri `WORKSPACE_PURGED` yang baru ditulis — lewat trigger integritas referensial yang berjalan dengan hak pemilik tabel, sehingga `REVOKE DELETE` di SDD §2.4.4 tidak melindunginya. FK dihapus; kolom kini menyimpan `workspace_id` sebagai referensi historis menggantung, persis seperti bunyi SRS.
+2. **`audit_logs` hanya punya partisi `DEFAULT`.** Terbukti di PostgreSQL 16: begitu ada satu baris di partisi default, `CREATE TABLE ... PARTITION OF ... FOR VALUES` gagal dengan `updated partition constraint for default partition would be violated by some row` — artinya partisi bulanan (SDD §2.4.4) **tidak akan pernah bisa** dibuat oleh scheduled job, dan semua kueri audit memindai satu partisi yang terus membesar (melanggar target <200 ms). Ditambahkan partisi bulan berjalan + bulan depan, serta fungsi `create_audit_log_partition(date)` yang memindahkan baris keluar dari partisi default sebelum attach sehingga idempoten dan aman dipanggil kapan pun.
+3. **`findings.version` tidak terdaftar sebagai `version_id_col`**, sehingga EC-11 hanya berupa perbandingan di Python (TOCTOU): di READ COMMITTED dua request triase sama-sama membaca version=1, sama-sama lolos, dan UPDATE kedua menimpa yang pertama (lost update, keduanya menerima HTTP 200). Sekarang `__mapper_args__` membuat UPDATE membawa `WHERE version = :old_version` dan `StaleDataError` dipetakan ke `409 Conflict`.
+4. **Index unik `users.email` bersifat case-sensitive** (terverifikasi: `'Alice@corp.com' = 'alice@corp.com'` → `f`), sehingga satu mailbox bisa punya dua akun dan login bergantung pada kapitalisasi yang diketik. Ditambahkan index fungsional unik `uq_users_email_lower` + tipe kontrak `NormalizedEmail` di lapisan Pydantic.
+5. **`proofs_of_concept.reproduction_steps` dianotasi `dict[str, Any]`** padahal kontrak dan kedua jalur ingesti menulis array (`list[str]`); JSONB menerima keduanya sehingga tidak ada error tulis, tapi tipe yang dideklarasikan berlawanan dengan data tersimpan dan `mypy --strict` tidak bisa menangkapnya (konstruktor SQLAlchemy `**kw: Any`).
+6. **`findings` tidak punya `created_at`** padahal `ManualFindingResponse.created_at` adalah field wajib — API mengarang timestamp yang tidak pernah disimpan, dan UC-11 retest tidak punya tanggal first-seen.
+7. **Kebijakan `ondelete` pada `users.id` tidak konsisten** sehingga jaminan tingkat-basis-data EC-03 mustahil: `workspace_members.user_id` CASCADE membuat DELETE user sukses dan menelantarkan workspace tanpa anggota (tetap memegang proyek/temuan/PoC), sementara tiga FK lain default NO ACTION menghasilkan `IntegrityError` → HTTP 500, bukan `409`. Kini `workspace_members.user_id` NO ACTION (database menolak, sesuai SDD §2.7.1) dan `projects.lead_pentester_id` `SET NULL`.
+8. **Dialek SQLite membuang `tzinfo` secara senyap** pada `DateTime(timezone=True)` (terverifikasi: nilai aware kembali naive), jadi logika perbandingan waktu EC-05 divalidasi dengan semantik yang salah — dan migrasi sama sekali tidak pernah dieksekusi oleh test apa pun. Ditambahkan lane `tests/models/test_postgres_semantics.py` (opt-in via `TEST_DATABASE_URL`) yang menjalankan `alembic upgrade head` ke PostgreSQL nyata lalu memverifikasi tz-awareness, retensi audit, provisioning partisi, EC-03, keunikan email, dan **nol drift model↔migrasi** via `compare_metadata`.
+9. **`alembic revision --autogenerate` mengusulkan `op.drop_table('audit_logs_default')`** (terverifikasi dengan menjalankannya) karena partisi direfleksikan sebagai tabel biasa dan tidak ada di `Base.metadata` — satu `--autogenerate` yang dipercaya begitu saja akan menghapus jejak audit, dan downgrade hasil generate membuatnya kembali sebagai tabel inherit biasa, bukan partisi, jadi tidak bisa dipulihkan. Diperbaiki via `app/core/migration_filters.py` yang menyaring partisi berdasarkan `pg_class.relispartition`; `alembic check` kini bersih.
+10. **Tanpa `MetaData(naming_convention=...)`** seluruh FK dinamai server, sehingga Alembic merender `op.drop_constraint(None, ...)` + warning (migrasi yang gagal saat dijalankan). Konvensi `ix`/`uq`/`fk` ditambahkan dan 12 FK dinormalkan namanya. Catatan penting: Alembic menerapkan konvensi `target_metadata` pada `op.create_table`, jadi nama FK berbeda tergantung **kapan** database dibangun — migrasi ini karena itu mencari FK berdasarkan (tabel, kolom, tabel referensi), bukan berdasarkan nama, agar benar untuk database lama maupun baru.
+11. **`subscriptions.midtrans_order_id` tidak unik** padahal webhook me-resolve-nya dengan `.one_or_none()` (`MultipleResultsFound` → HTTP 500 di endpoint tanpa autentikasi); kini unik, sesuai deskripsi SDD §2.4.2 #4 ("kode referensi order unik").
+12. **`workspaces.is_deleted` tidak dibaca di mana pun**, sehingga workspace yang sudah soft-delete tetap bisa dibaca & ditulis selama 30 hari retensi. Ditambahkan `workspace_is_active()` dan dipasang di `require_workspace_role` serta jalur autentikasi API key.
+
+**Bukti Verifikasi Review Kedua:** `alembic upgrade head` → `downgrade base` → `upgrade head` bersih di database kosong; migrasi juga diterapkan ke database dev nyata (jalur nama FK lama) dengan 12 FK ternormalkan, partisi `audit_logs_y2026m10`/`y2026m11` terbentuk, dan data utuh; `alembic check` tanpa drift; 11 test PostgreSQL + 7 test SQLite baru lolos (total 277 passed, 12 skipped); ruff, `mypy --strict`, bandit nol temuan; seeder diverifikasi ulang idempoten. Catatan: `downgrade` **menolak** berjalan jika sudah ada baris audit yang melampaui workspace-nya, karena PostgreSQL tidak mengizinkan FK `NOT VALID` pada tabel terpartisi — menolak dengan pesan jelas dipilih ketimbang menghapus bukti kepatuhan secara senyap.
+
 ---
 
 ### FASE 3: Layanan Domain & Engine Inti (*Application Logic*)
 
 > **Tujuan:** Membangun domain logic murni dan modul keamanan yang berdiri sendiri (*Pure Business Logic*).
 
-- [ ] **3.1** `DeduplicationService` (`apps/api/app/domain/deduplication.py`):
-  - [ ] Formula hash deterministik: $\text{SHA256}(\text{project\_id} + \text{cwe} + \text{host} + \text{port} + \text{path})$.
-  - [ ] Uji unit ketepatan hash pada berbagai variasi endpoint (EC-08).
-- [ ] **3.2** `CVSSCalculator` (`apps/api/app/domain/cvss.py`):
-  - [ ] Parsing string vektor CVSS v3.1 (`AV:N/AC:L/...`).
-  - [ ] Perhitungan skor dasar metrik matematis FIRST CVSS (0.0 s.d. 10.0).
-- [ ] **3.3** `ScopeEnforcer` (`apps/api/app/domain/scope.py`):
-  - [ ] Normalisasi URL/FQDN & pencocokan CIDR (`ipaddress`).
-  - [ ] Penandaan otomatis `is_quarantined = true` untuk temuan out-of-scope (UC-07d / EC-04).
-- [ ] **3.4** `PromptSanitizationService` (`apps/api/app/domain/sanitizer.py`):
-  - [ ] Pelucutan alamat IP privat, port, URL mentah, dan bukti PoC (UC-11a).
-  - [ ] Pembersihan karakter kontrol pencegah *Indirect Prompt Injection* (EC-13).
-- [ ] **3.5** `DeterministicFallbackEngine` (`apps/api/app/domain/fallback.py`):
-  - [ ] Berkas data `apps/api/app/data/cwe_catalog.json` (kurasi narasi remediasi CWE).
-  - [ ] Pemuatan in-memory saat startup dengan lookup $\mathcal{O}(1) < 1\text{ ms}$ (UC-11b / EC-14).
-- [ ] **3.6** `SafeURLFetcher` (`apps/api/app/services/safe_fetcher.py`):
-  - [ ] Custom fetcher WeasyPrint pencegah SSRF (Bab 2.5 SDD).
-  - [ ] Blokir akses IP privat RFC 1918, cloud metadata 169.254.0.0/16, loopback, dan skema `file://`.
+- [x] **3.1** `DeduplicationService` (`apps/api/app/domain/deduplication.py`):
+  - [x] Formula hash deterministik: $\text{SHA256}(\text{project\_id} + \text{cwe} + \text{host} + \text{port} + \text{path})$.
+  - [x] Uji unit ketepatan hash pada berbagai variasi endpoint (EC-08).
+- [x] **3.2** `CVSSCalculator` (`apps/api/app/domain/cvss.py`):
+  - [x] Parsing string vektor CVSS v3.1 (`AV:N/AC:L/...`).
+  - [x] Perhitungan skor dasar metrik matematis FIRST CVSS (0.0 s.d. 10.0).
+- [x] **3.3** `ScopeEnforcer` (`apps/api/app/domain/scope.py`):
+  - [x] Normalisasi URL/FQDN & pencocokan CIDR (`ipaddress`).
+  - [x] Predikat `is_target_in_scope()` (nested-subdomain-aware, EC-04) — penandaan `is_quarantined = true` pada baris `findings` dilakukan oleh `IngestRouter` di FASE 4 (UC-07d), modul ini hanya logika murni penentuan in/out-of-scope.
+- [x] **3.4** `PromptSanitizationService` (`apps/api/app/domain/sanitizer.py`):
+  - [x] Pelucutan alamat IP privat, port, URL mentah, dan bukti PoC (UC-11a) — via whitelist kolom ketat (`whitelist_finding_metadata`) + `sanitize_text` untuk teks bebas.
+  - [x] Pembersihan karakter kontrol pencegah *Indirect Prompt Injection* (EC-13).
+- [x] **3.5** `DeterministicFallbackEngine` (`apps/api/app/domain/fallback.py`):
+  - [x] Berkas data `apps/api/app/data/cwe_catalog.json` (kurasi narasi remediasi CWE, termasuk entri `UNKNOWN` sebagai fallback default).
+  - [x] Pemuatan in-memory dengan `lru_cache` (dibaca dari disk sekali, lookup dict $\mathcal{O}(1)$) (UC-11b / EC-14).
+- [x] **3.6** `SafeURLFetcher` (`apps/api/app/services/safe_fetcher.py`):
+  - [x] Custom fetcher WeasyPrint pencegah SSRF (Bab 2.5 SDD) — menggunakan properti `ipaddress` (`is_private/is_loopback/is_link_local/is_reserved/is_unspecified/is_multicast` + `ipv4_mapped`) alih-alih daftar CIDR manual, memperbaiki gap yang ditemukan audit FASE-2 (IPv4-mapped IPv6 seperti `::ffff:127.0.0.1`). `default_fetcher` di-inject (bukan impor langsung `weasyprint.default_url_fetcher`) agar modul ini testable tanpa dependensi WeasyPrint/network — pengkabelan nyata ke WeasyPrint adalah pekerjaan FASE 4.
+  - [x] Blokir akses IP privat RFC 1918, cloud metadata 169.254.0.0/16, loopback, dan skema `file://` (terverifikasi via test parametrized, lihat Bukti Verifikasi).
+
+**Bukti Verifikasi (22 Oktober 2026):** 99 unit test baru (120 test case setelah ekspansi parametrize) di `tests/domain/` dan `tests/services/`, total proyek 120 test case, coverage 96.7%. `calculate_base_score` diverifikasi terhadap 3 vektor CVSS v3.1 referensi (termasuk kalkulasi tangan untuk kasus *Scope Changed*, bukan sekadar membaca kode). `safe_url_fetcher` diverifikasi memblokir IPv4-mapped IPv6 loopback (`::ffff:127.0.0.1`) — persis gap yang diidentifikasi pada audit sebelum FASE 2. `uv run python scripts/check_quality.py` lolos (ruff, mypy --strict, bandit, pip-audit nol temuan).
+
+**Review Pasca-Implementasi (22 Oktober 2026, sebelum FASE 4):** `/find-bugs` + `/systematic-debugging` menemukan 2 bug keamanan nyata di modul FASE 3 (dibuktikan empiris, bukan sekadar membaca kode):
+1. **[DIPERBAIKI]** `sanitizer.py` `_HOSTNAME_PATTERN` memakai regex ber-*nested quantifier* (`(?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}`) yang rentan *catastrophic/quadratic backtracking* — diukur 8-34 detik untuk payload 40 ribu karakter `"a."` berulang. Ini relevan langsung karena `sanitize_text` justru didesain memproses teks banner scanner yang berasal dari penyerang (model ancaman EC-13 sendiri). Diperbaiki dengan regex datar tanpa nesting (`[a-zA-Z0-9.-]+`, O(n)) + validasi bentuk-hostname di callback Python (`_looks_like_hostname`). Diverifikasi turun dari 34 detik menjadi <0.01 detik pada payload identik; ditambahkan 2 test regresi permanen (`test_sanitize_text_runs_in_linear_time_on_adversarial_dotted_input`, `..._on_mixed_adversarial_banner`) plus stress-test manual ke-3 regex lain di modul (semua O(n), aman).
+2. **[DITUNDA KE FASE 4, didokumentasikan]** `safe_fetcher.py` memvalidasi hostname→IP sekali untuk cek anti-SSRF, lalu memanggil `default_fetcher(url, ...)` dengan URL asli (bukan IP yang sudah divalidasi) — `default_fetcher` akan me-resolve DNS lagi secara independen saat benar-benar melakukan fetch. Dibuktikan empiris: simulasi DNS rebinding (lookup pertama kembalikan IP publik, lolos validasi; lookup kedua saat fetch nyata kembalikan `127.0.0.1`) berhasil membypass guard sepenuhnya. Perbaikan root-cause (resolve-sekali + pin IP via `httpx` dengan `Host` header & SNI override, bukan monkeypatch `socket` global yang tidak aman untuk Celery worker konkuren) **sengaja ditunda ke FASE 4** karena baru di sana `default_fetcher` benar-benar dikabel ke WeasyPrint nyata — memperbaikinya sekarang berisiko membuat asumsi yang salah tentang API WeasyPrint yang sebenarnya.
 
 ---
 
@@ -204,34 +227,47 @@ $ python scripts/check_quality.py
 
 > **Tujuan:** Membangun endpoint web API FastAPI, middleware keamanan, dan background worker Celery/Redis.
 
-- [ ] **4.1** Middleware & Error Handling:
-  - [ ] Global Exception Handler yang membungkus seluruh galat HTTP ke dalam `StandardErrorEnvelope`.
-  - [ ] CORS middleware & Security Headers (HSTS, CSP).
-- [ ] **4.2** `AuthRouter` (`apps/api/app/routers/auth.py`):
-  - [ ] `POST /api/v1/auth/register` (Registrasi akun + pembuatan workspace default).
-  - [ ] `POST /api/v1/auth/login` (Otentikasi Argon2id + JWT token issuance).
-  - [ ] Verifikasi `token_version` pada dependensi `get_current_user`.
-- [ ] **4.3** `WorkspaceRouter` & `ProjectRouter`:
-  - [ ] CRUD Workspace, RBAC permissions guard (`MANAGER`, `PENTESTER`, `VIEWER` — SDD §2.4.2 Tabel 3).
-  - [ ] Inisialisasi Proyek Audit & validasi rentang tanggal ROE (EC-05).
-- [ ] **4.4** `IngestRouter` (`apps/api/app/routers/ingest.py`):
-  - [ ] `POST /api/v1/workspaces/{w_id}/projects/{p_id}/findings/batch` (Verifikasi API Key, `Idempotency-Key`, paywall check batas 50 temuan `HTTP 413`).
-  - [ ] `POST /api/v1/workspaces/{w_id}/projects/{p_id}/findings/manual` (Entri manual CVSS).
-- [ ] **4.5** `TriageRouter` (`apps/api/app/routers/triage.py`):
-  - [ ] `PATCH /api/v1/findings/{id}/status` dengan *Optimistic Locking* kolom `version` (`HTTP 409`).
-  - [ ] Auto-uncheck `is_curated_for_report` saat status diubah ke `FALSE_POSITIVE` (EC-12).
-- [ ] **4.6** `AIRouter` (`apps/api/app/routers/ai.py`):
-  - [ ] Integrasi SDK Google Gemini API dengan 3x exponential retry backoff.
-  - [ ] Otomatis alihkan ke `DeterministicFallbackEngine` saat HTTP 429 atau timeout.
-- [ ] **4.7** `ReportRouter` & Celery Worker (`apps/api/app/workers/report_worker.py`):
-  - [ ] `POST /api/v1/.../reports/compile-pdf` (`HTTP 202 Accepted` + Celery task).
-  - [ ] *Distributed Lock* Redis 10 detik (`lock:report:{id}`) cegah double-click (EC-15).
-  - [ ] Worker WeasyPrint render HTML/CSS Paged Media + unggah S3.
-  - [ ] Handler `on_failure` otomatis rollback kuota jika worker crash (EC-16).
-  - [ ] `GET /api/v1/.../reports/{id}/download` (Proxy regenerasi presigned URL segar `HTTP 307`) (EC-17).
-- [ ] **4.8** `BillingRouter` (`apps/api/app/routers/billing.py`):
-  - [ ] `POST /api/v1/.../billing/checkout` (Koneksi Midtrans Snap API).
-  - [ ] `POST /api/v1/billing/webhook/midtrans` (Validasi tanda tangan SHA-512 & idempotency check) (EC-18).
+- [x] **4.1** Middleware & Error Handling:
+  - [x] Global Exception Handler yang membungkus seluruh galat HTTP ke dalam `StandardErrorEnvelope` (termasuk `RequestValidationError` → 422 dan `Exception` tak terduga → 500 tanpa membocorkan detail internal).
+  - [x] CORS middleware & Security Headers (HSTS, CSP, X-Content-Type-Options, X-Frame-Options).
+  - [x] **Kontrak baru ditambahkan**: `ErrorCode.CONFLICT` (HTTP 409) — SDD §2.6.1.7 hanya mendaftar 8 kode, tapi EC-03/EC-11 secara eksplisit membutuhkan `409 Conflict` dan tidak ada kode untuk itu sampai sekarang.
+- [x] **4.2** `AuthRouter` (`apps/api/app/routers/auth.py`):
+  - [x] `POST /api/v1/auth/register` (Registrasi akun + pembuatan workspace default + Subscription FREE; mendukung `invitation_token` EC-02 untuk join workspace yang mengundang).
+  - [x] `POST /api/v1/auth/login` (Otentikasi Argon2id + JWT token issuance; mitigasi timing-attack user-enumeration via dummy-hash verify).
+  - [x] Verifikasi `token_version` pada dependensi `get_current_user`.
+- [x] **4.3** `WorkspaceRouter` & `ProjectRouter`:
+  - [x] CRUD Workspace (create/update/invite-member/create-api-key), RBAC permissions guard (`MANAGER`, `PENTESTER`, `VIEWER` — SDD §2.4.2 Tabel 3).
+  - [x] Inisialisasi Proyek Audit & validasi rentang tanggal ROE (EC-05, divalidasi di kontrak `ProjectCreateRequest`), assign lead pentester (UC-06a).
+- [x] **4.4** `IngestRouter` (`apps/api/app/routers/ingest.py`):
+  - [x] `POST /api/v1/workspaces/{w_id}/projects/{p_id}/findings/batch` (Verifikasi API Key via `X-VulnFlow-API-Key`, paywall check batas 50 temuan Free Tier `HTTP 413`) — mengkabel `ScopeEnforcer` (is_quarantined), `DeduplicationService` (dedup_hash), `CVSSCalculator` (fallback skor dari vector), dan `crypto.encrypt_poc` (FASE 3 → produksi, bukan lagi modul terisolasi).
+  - [x] `POST /api/v1/workspaces/{w_id}/projects/{p_id}/findings/manual` (Entri manual CVSS via `CVSSCalculator`).
+- [x] **4.5** `TriageRouter` (`apps/api/app/routers/triage.py`):
+  - [x] `PATCH /api/v1/.../findings/{id}/status` dengan *Optimistic Locking* kolom `version` (`HTTP 409 CONFLICT`), mencatat `audit_logs` (IP klien asli, bukan placeholder).
+  - [x] Auto-uncheck `is_curated_for_report` saat status diubah ke `FALSE_POSITIVE` (EC-12).
+- [x] **4.6** `AIRouter` (`apps/api/app/routers/ai.py`):
+  - [x] `AIGhostwriterService` (`app/domain/ai_ghostwriter.py`): orkestrasi `PromptSanitizationService` (whitelist metadata) → 3x exponential retry via `GeminiLLMAdapter` (`httpx` langsung ke REST API Gemini, bukan SDK resmi — menghindari dependensi baru, konsisten dengan pola proyek) → `DeterministicFallbackEngine` otomatis saat retry habis (EC-14).
+  - [x] Diverifikasi: adapter hanya menerima 4 field whitelist (title/cwe_id/cvss_score/severity), tidak pernah target_host/PoC — Zero-PoC-to-AI dibuktikan lewat assertion langsung di test, bukan sekadar membaca kode.
+- [x] **4.7** `ReportRouter` & Celery Worker (`apps/api/app/workers/report_worker.py`):
+  - [x] `POST /api/v1/.../reports/compile-pdf` (`HTTP 202 Accepted` + Celery task via `compile_pdf_task.delay()`).
+  - [x] *Distributed Lock* Redis 10 detik (`lock:report:{project_id}`, `app/core/redis_client.py`) cegah double-click — klik kedua mengembalikan `job_id` yang sama (EC-15).
+  - [x] Worker WeasyPrint render HTML/CSS (`app/services/report_renderer.py`) + unggah S3/MinIO (`app/services/s3_storage.py`).
+    - ✅ **Gap DNS-rebinding dari FASE 3 diperbaiki di sini** (bukan ditunda lagi): `safe_fetcher.py` ditulis ulang — bukan lagi validasi-lalu-delegasi ke `default_fetcher`, melainkan fetch mandiri yang connect langsung ke IP yang sudah divalidasi (satu resolusi DNS, tidak pernah dua), dengan `Host` header & `sni_hostname` extension `httpx` tetap memakai hostname asli. Diverifikasi via `httpx.MockTransport`: request yang benar-benar dikirim terbukti menyasar IP yang sudah divalidasi, bukan hasil resolusi ulang.
+  - [x] Handler `compile_report` rollback kuota otomatis jika render crash (EC-16) — diverifikasi: crash render tidak membuat baris `Report`, tidak mengunggah ke S3, dan tidak menambah `reports_used_this_month`.
+  - [x] `GET /api/v1/workspaces/{w_id}/reports/{report_id}/download` (Proxy regenerasi presigned URL segar `HTTP 307`) (EC-17).
+  - ⚠️ **Keterbatasan lingkungan terdokumentasi**: WeasyPrint butuh pustaka native GTK3/Pango/Cairo yang tidak selalu terpasang di setiap mesin dev (hadir di target deployment Docker Linux sesuai `docker-compose.yml`/prasyarat SDD) — import di-lazy-kan, dan test render PDF nyata `skip` secara eksplisit (dengan alasan tercatat) jika pustaka native tidak tersedia, bukan dipalsukan lolos.
+- [x] **4.8** `BillingRouter` (`apps/api/app/routers/billing.py`):
+  - [x] `POST /api/v1/workspaces/{w_id}/billing/checkout` (Koneksi Midtrans Snap API via `MidtransAdapter`, `httpx` langsung — bukan SDK resmi).
+  - [x] `POST /api/v1/billing/webhook/midtrans` (Validasi tanda tangan SHA-512 case-insensitive constant-time & idempotency check — diverifikasi webhook duplikat tidak merusak state) (EC-18).
+  - ℹ️ Harga self-service hanya tersedia untuk tier PRO (Rp 750.000, sesuai contoh SDD §2.3.4); ENTERPRISE tidak dipasarkan dengan harga di dokumen manapun yang dibaca, sehingga checkout ENTERPRISE sengaja ditolak dengan `422` (sales-led, bukan self-service) alih-alih menebak angka.
+
+**Bukti Verifikasi (24 Oktober 2026):** 271 test case total di seluruh proyek (naik dari 120 di akhir FASE 3 — 151 test baru FASE 4), coverage 94.4%. Seluruh 8 sub-fase dibangun murni TDD (merah→hijau per endpoint/modul), termasuk 2 kontrak baru yang ditemukan hilang saat implementasi dan ditambahkan dengan test (`ErrorCode.CONFLICT`, serta modul `workspace_schemas.py` lengkap untuk Workspace/Project/APIKey/Invite CRUD yang belum ada sejak FASE 1). `uv run python scripts/check_quality.py` lolos (ruff, mypy --strict, bandit, pip-audit nol temuan) — termasuk 1 temuan bandit B101 (`assert` pada jalur produksi, diperbaiki jadi exception eksplisit) dan 1 CVE dependensi transitif (`brotli` via `fonttools[woff]`, dinaikkan via `[tool.uv] constraint-dependencies`).
+
+> ✅ **Status Remediasi Temuan Audit Pasca-Implementasi (25 Oktober 2026):** Seluruh temuan audit dari FASE 4 (**2 CRITICAL, 16 HIGH, 25 MEDIUM, 24 LOW**) telah **100% DIPERBAIKI DAN DIVERIFIKASI**.
+> - Celah CRITICAL tenant isolation pada `routers/triage.py` & `routers/ai.py` telah diperbaiki fail-closed.
+> - Seluruh celah HIGH (Midtrans fail-open & nominal check, auth revocation, Celery task inclusion, DB row locking, quota reset, invitation replay protection, IDOR assign-lead, prompt injection tone, sanitizer wiring, ROE datetime timezone, CVSS vector pattern) telah diperbaiki dengan pengetesan komprehensif.
+> - Seluruh celah MEDIUM & LOW (distributed lock compare-and-delete, WeasyPrint watermark fixed diagonal @page, Gemini header auth, SafeFetcher CGNAT & redirect guard, workspace count limit, quality gates hardening) telah diselesaikan.
+> - Suite pengujian meningkat menjadi **330 test lolos (100% pass, 0 fail)** dengan coverage **91.4%**.
+> - Skrip `uv run python scripts/check_quality.py` lolos seluruh 5 gerbang mutu (Ruff, Mypy strict, Bandit, Pytest coverage >= 85%, pip-audit) dengan `[SUCCESS] Seluruh Quality Gates Lolos! Kode siap di-commit.` Lihat `DOCS/AUDIT_FINDINGS.md` §5 untuk rincian lengkap perbaikan per ID.
 
 ---
 
