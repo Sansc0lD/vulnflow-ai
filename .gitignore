@@ -22,6 +22,10 @@ dist/
 # Docker volumes (bind-mounted local data, if any)
 .docker-data/
 
+# Scanner outputs
+*.jsonl
+*.xml
+
 # OS / Editor
 .DS_Store
 Thumbs.db

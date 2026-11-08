@@ -41,9 +41,22 @@ services:
       - vulnflow_net
 
   minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    # minio/minio (Docker Hub) and quay.io/minio/minio were both pulled from
+    # public access in Sept 2026 as part of MinIO's licensing changes (every
+    # tag now 401s/pull-denied, confirmed directly against both registries).
+    # cgr.dev/chainguard/minio is the maintained still-public replacement.
+    # Chainguard only publishes a rolling `latest` (no long-lived pinned
+    # historical release tags like MinIO's old scheme), so this is a floating
+    # tag by necessity, not by choice (see LOW-02 in AUDIT_FINDINGS.md).
+    image: cgr.dev/chainguard/minio:latest
     container_name: vulnflow-minio
     restart: unless-stopped
+    # Chainguard's image runs as a non-root user by default, which can't
+    # write to the mounted /data volume; root is required for the server to
+    # format/use its own data directory. Confirmed by actually running the
+    # image both ways — non-root fails with "Unable to initialize backend:
+    # file access denied", root boots cleanly and passes its own healthcheck.
+    user: root
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
@@ -58,6 +71,65 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - vulnflow_net
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: vulnflow-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-vulnflow}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vulnflow}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - S3_ENDPOINT_URL=http://minio:9000
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - ./apps:/app/apps
+      - ./packages:/app/packages
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vulnflow_net
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: vulnflow-worker
+    restart: unless-stopped
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=info"]
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-vulnflow}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-vulnflow}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - S3_ENDPOINT_URL=http://minio:9000
+    volumes:
+      - ./apps:/app/apps
+      - ./packages:/app/packages
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - vulnflow_net
 

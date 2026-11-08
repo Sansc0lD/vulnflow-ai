@@ -113,3 +113,38 @@ def test_500_internal_error_includes_security_headers() -> None:
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert "max-age=" in response.headers["strict-transport-security"]
+
+
+def test_docs_page_csp_nonce_matches_inline_script_tag() -> None:
+    # SDD §2.6.1.8 requires a strict nonce-based CSP. An earlier version of
+    # this policy was scoped (CDN allowed) but had no nonce/'unsafe-inline',
+    # which silently blocks Swagger UI's one inline bootstrap <script> in a
+    # real browser — confirmed live via headless Chromium, where #swagger-ui
+    # rendered completely empty under that policy. `requests`/TestClient
+    # can't detect this (no CSP enforcement, no JS execution), so this test
+    # instead asserts the structural invariant a browser actually enforces:
+    # the nonce in the CSP header must equal the nonce on the inline script.
+    with TestClient(app) as client:
+        response = client.get("/docs")
+
+    assert response.status_code == 200
+    csp = response.headers["content-security-policy"]
+    nonce = csp.split("'nonce-")[1].split("'")[0]
+    assert f'<script nonce="{nonce}">' in response.text
+
+
+def test_docs_page_nonce_is_unique_per_request() -> None:
+    with TestClient(app) as client:
+        first = client.get("/docs").headers["content-security-policy"]
+        second = client.get("/docs").headers["content-security-policy"]
+
+    assert first != second
+
+
+def test_redoc_page_renders_without_requiring_a_script_nonce() -> None:
+    with TestClient(app) as client:
+        response = client.get("/redoc")
+
+    assert response.status_code == 200
+    assert "<redoc" in response.text
+    assert "fonts.googleapis.com" not in response.text

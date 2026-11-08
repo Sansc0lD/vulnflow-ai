@@ -30,15 +30,16 @@ confirmed against a live PostgreSQL 16 instance:
 7. Foreign keys are renamed to the `Base.metadata` naming convention so
    Alembic can render `drop_constraint()` for them at all (it previously
    emitted `op.drop_constraint(None, ...)` plus a warning).
-8. `ck_subscription_payment_status` widened to allow `'DENY'`. The Midtrans
-   webhook handler (`routers/billing.py`) sets `payment_status` to the
-   upper-cased `transaction_status` for EXPIRE/CANCEL/DENY notifications, but
-   the original constraint only allowed PENDING/SETTLEMENT/EXPIRE/CANCEL — a
-   real `deny` notification from Midtrans (a card declined, say) made the
-   webhook's own `db.commit()` raise `IntegrityError`, which the router never
-   catches, producing an uncaught 500 on a public, unauthenticated endpoint
-   instead of the intended downgrade-to-FREE. Found because the regression
-   test named `..._cancel_or_deny` never actually sent a `deny` payload.
+
+(The `ck_subscription_payment_status` / `'DENY'` fix is a separate later
+migration, not folded in here — see `e5b8f2a04c91`. An earlier pass edited
+*this* file in place to add it, which is wrong for any database that already
+ran this revision: Alembic tracks revision IDs, not file content, so
+`alembic upgrade head` silently does nothing for a DB already at this
+revision, no matter what gets added to its body afterward. Caught by
+actually running the fixed CLI against a real `docker compose` Postgres that
+had already migrated past this revision — the constraint was still missing
+`'DENY'` live, despite the "fix" being in the file.)
 
 Revision ID: d4a7f1c93b28
 Revises: ca8160ec24d8
@@ -314,25 +315,9 @@ def upgrade() -> None:
     op.execute(_CREATE_PARTITION_FUNCTION)
     op.execute(_PROVISION_PARTITIONS)
 
-    # --- 8. allow 'DENY' in subscriptions.payment_status -------------------
-    op.drop_constraint("ck_subscription_payment_status", "subscriptions", type_="check")
-    op.create_check_constraint(
-        "ck_subscription_payment_status",
-        "subscriptions",
-        "payment_status IN ('PENDING', 'SETTLEMENT', 'EXPIRE', 'CANCEL', 'DENY')",
-    )
-
 
 def downgrade() -> None:
     """Downgrade schema."""
-    # --- 8. revert 'DENY' allowance ---------------------------------------
-    op.drop_constraint("ck_subscription_payment_status", "subscriptions", type_="check")
-    op.create_check_constraint(
-        "ck_subscription_payment_status",
-        "subscriptions",
-        "payment_status IN ('PENDING', 'SETTLEMENT', 'EXPIRE', 'CANCEL')",
-    )
-
     # --- 2. monthly partitions -------------------------------------------
     # Rows are moved back into the default partition before each monthly
     # partition is dropped, so downgrading never loses audit data. The DETACH

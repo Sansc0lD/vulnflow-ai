@@ -96,17 +96,21 @@ class StepResult:
     detail: str = ""
 
 
-def run(cmd: list[str]) -> tuple[int, str]:
+def run(cmd: list[str], timeout: int | None = 180) -> tuple[int, str]:
     """Run a command via `uv run`, returning (exit_code, combined_output)."""
     # F4-LOW-18: nosec dengan identifier spesifik B603, B404
-    proc = subprocess.run(  # nosec: B603, B404
-        [UV_PATH, "run", *cmd],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return proc.returncode, (proc.stdout + proc.stderr)
+    try:
+        proc = subprocess.run(  # nosec: B603, B404
+            [UV_PATH, "run", *cmd],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+        return proc.returncode, (proc.stdout + proc.stderr)
+    except subprocess.TimeoutExpired:
+        return 124, f"[TIMEOUT] Command timed out after {timeout}s: {' '.join(cmd)}"
 
 
 def _run_lint_tool(name: str, dirs: list[str], *commands: list[str]) -> StepResult:
@@ -170,7 +174,7 @@ def _count_resilience_tests() -> int:
     # F4-MED-24: Hitung jumlah item test aktual yang dikumpulkan oleh pytest
     if not RESILIENCE_TEST_DIR.is_dir():
         return 0
-    code, out = run(["pytest", "--collect-only", "-q", str(RESILIENCE_TEST_DIR)])
+    code, out = run(["pytest", "--collect-only", str(RESILIENCE_TEST_DIR)])
     if code != 0:
         return 0
     return len([line for line in out.splitlines() if "::" in line])

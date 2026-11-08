@@ -1,6 +1,5 @@
 """PLAN.md FASE 4.7 — compile_report orchestration (EC-16 quota rollback on crash)."""
 
-import uuid
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
 
@@ -242,7 +241,10 @@ def test_compile_report_resets_quota_when_quota_reset_date_passed(session: Sessi
 def test_compile_report_rejects_cross_tenant_or_missing_project(session: Session) -> None:
     # F4-LOW-03
     project = _make_project_with_finding(session, quota=3, used=0)
-    other_workspace_id = uuid.uuid4()
+    other_workspace = Workspace(name="Other Workspace")
+    session.add(other_workspace)
+    session.commit()
+    other_workspace_id = other_workspace.id
     session.add(
         Subscription(
             workspace_id=other_workspace_id,

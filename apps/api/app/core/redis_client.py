@@ -3,7 +3,8 @@
 import contextlib
 import os
 import threading
-from typing import Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 import redis
 
@@ -37,6 +38,26 @@ def get_redis_client() -> redis.Redis:
             if _client is None:
                 _client = redis.Redis.from_url(get_redis_url(), decode_responses=True)
     return _client
+
+
+def get_redis_client_factory() -> Callable[[], Any]:
+    """Injects the *function*, not a connected client.
+
+    For an endpoint where Redis is only needed conditionally (e.g. ingest's
+    optional `Idempotency-Key` gate), a plain `Depends(get_redis_client)`
+    would call `get_redis_client()` — and therefore require `REDIS_URL` to be
+    configured — on every single request to that route, even ones that never
+    touch Redis. Depending on this factory instead defers that call (and its
+    potential `RuntimeError`) until the endpoint body actually needs it.
+
+    Returns `Callable[[], Any]`, not `Callable[[], RedisLike]`, for the same
+    reason `reports.py` types its own `Depends(get_redis_client)` as `Any`:
+    the real `redis.Redis` isn't declared against the `RedisLike` Protocol,
+    so mypy can't verify structural compatibility at this boundary — only
+    `DistributedLock.__init__`'s `client: RedisLike` parameter actually
+    enforces the shape once a caller passes a value in.
+    """
+    return get_redis_client
 
 
 class DistributedLock:

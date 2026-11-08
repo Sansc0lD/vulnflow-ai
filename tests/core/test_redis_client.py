@@ -1,7 +1,12 @@
 """PLAN.md FASE 4.7 — Redis client config + distributed lock (EC-15)."""
 
 import pytest
-from app.core.redis_client import DistributedLock, get_redis_url
+from app.core.redis_client import (
+    DistributedLock,
+    get_redis_client,
+    get_redis_client_factory,
+    get_redis_url,
+)
 
 
 class _FakeRedis:
@@ -32,6 +37,21 @@ def test_get_redis_url_raises_when_missing(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.delenv("REDIS_URL", raising=False)
     with pytest.raises(RuntimeError, match="REDIS_URL"):
         get_redis_url()
+
+
+def test_get_redis_client_factory_defers_without_connecting(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Must not require REDIS_URL just to obtain the factory — only calling
+    # the returned function should (ingest.py's optional Idempotency-Key gate
+    # relies on exactly this to stay usable without Redis configured).
+    monkeypatch.delenv("REDIS_URL", raising=False)
+
+    factory = get_redis_client_factory()
+
+    assert factory is get_redis_client
+    with pytest.raises(RuntimeError, match="REDIS_URL"):
+        factory()
 
 
 def test_distributed_lock_acquire_succeeds_when_free() -> None:

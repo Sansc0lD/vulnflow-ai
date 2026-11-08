@@ -3,11 +3,30 @@
 import uuid
 
 import pytest
+from app.core.redis_client import get_redis_client_factory
 from app.main import app
 from app.models.finding import Finding
 from app.models.proof_of_concept import ProofOfConcept
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
+
+
+class _FakeRedis:
+    def __init__(self) -> None:
+        self._store: dict[str, str] = {}
+
+    def set(self, key: str, value: str, *, nx: bool = False, ex: int | None = None) -> bool | None:
+        if nx and key in self._store:
+            return None
+        self._store[key] = value
+        return True
+
+    def get(self, key: str) -> str | None:
+        return self._store.get(key)
+
+    def delete(self, key: str) -> None:
+        self._store.pop(key, None)
+
 
 _REGISTRATION = {
     "email": "ingest@example.com",
@@ -307,6 +326,99 @@ def test_manual_finding_rejects_viewer_role(
         )
 
     assert response.status_code == 403
+
+
+def test_batch_ingest_idempotency_key_short_circuits_reprocessing(
+    db_session: Session, workspace_project_and_api_key: dict[str, str]
+) -> None:
+    # EC-07: a retried request carrying the SAME Idempotency-Key must get
+    # back the exact result of the original attempt without reprocessing —
+    # proven here by sending a *different* finding on the second call. If
+    # the gate works, that second finding is never persisted and the
+    # response is byte-identical to the first. (dedup_hash alone would not
+    # produce this: it dedups by finding content, not by request identity,
+    # so a genuinely different finding would normally always be accepted.)
+    ctx = workspace_project_and_api_key
+    fake_redis = _FakeRedis()
+    app.dependency_overrides[get_redis_client_factory] = lambda: lambda: fake_redis
+    try:
+        headers = {"X-VulnFlow-API-Key": ctx["api_key"], "Idempotency-Key": "chunk-0"}
+        scan_metadata = {
+            "scanner_name": "nuclei",
+            "scanner_version": "v3",
+            "scan_duration_seconds": 1,
+        }
+
+        with TestClient(app) as client:
+            first = client.post(
+                _batch_url(ctx),
+                json={"scan_metadata": scan_metadata, "findings": [_one_finding()]},
+                headers=headers,
+            )
+            second = client.post(
+                _batch_url(ctx),
+                json={
+                    "scan_metadata": scan_metadata,
+                    "findings": [_one_finding(endpoint_path="/totally-different-finding")],
+                },
+                headers=headers,
+            )
+
+        assert first.status_code == second.status_code == 201
+        assert (
+            first.json()
+            == second.json()
+            == {
+                "new_findings_count": 1,
+                "duplicate_findings_count": 0,
+                "quarantined_count": 0,
+            }
+        )
+        all_findings = (
+            db_session.query(Finding).filter_by(project_id=uuid.UUID(ctx["project_id"])).all()
+        )
+        assert len(all_findings) == 1  # the second call's finding was never persisted
+    finally:
+        app.dependency_overrides.pop(get_redis_client_factory, None)
+
+
+def test_batch_ingest_different_idempotency_keys_both_process(
+    db_session: Session, workspace_project_and_api_key: dict[str, str]
+) -> None:
+    # EC-07's other half: distinct keys (one per chunk) must NOT be treated
+    # as replays of each other.
+    ctx = workspace_project_and_api_key
+    fake_redis = _FakeRedis()
+    app.dependency_overrides[get_redis_client_factory] = lambda: lambda: fake_redis
+    try:
+        scan_metadata = {
+            "scanner_name": "nuclei",
+            "scanner_version": "v3",
+            "scan_duration_seconds": 1,
+        }
+        with TestClient(app) as client:
+            first = client.post(
+                _batch_url(ctx),
+                json={"scan_metadata": scan_metadata, "findings": [_one_finding()]},
+                headers={"X-VulnFlow-API-Key": ctx["api_key"], "Idempotency-Key": "chunk-0"},
+            )
+            second = client.post(
+                _batch_url(ctx),
+                json={
+                    "scan_metadata": scan_metadata,
+                    "findings": [_one_finding(endpoint_path="/chunk-1-finding")],
+                },
+                headers={"X-VulnFlow-API-Key": ctx["api_key"], "Idempotency-Key": "chunk-1"},
+            )
+
+        assert first.json()["new_findings_count"] == 1
+        assert second.json()["new_findings_count"] == 1
+        all_findings = (
+            db_session.query(Finding).filter_by(project_id=uuid.UUID(ctx["project_id"])).all()
+        )
+        assert len(all_findings) == 2
+    finally:
+        app.dependency_overrides.pop(get_redis_client_factory, None)
 
 
 def test_batch_ingest_rejects_api_key_for_different_workspace(

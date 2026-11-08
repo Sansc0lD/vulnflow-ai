@@ -53,12 +53,16 @@ select = [
 # general, but FastAPI's entire DI system is built on `Depends(...)` (and
 # this project's own RBAC factory `require_workspace_role(...)`) being used
 # exactly as a default value — that is the required, idiomatic FastAPI
-# pattern (FASE 4+), not a bug to fix.
+# pattern (FASE 4+), not a bug to fix. `typer.Option(...)` is the same
+# pattern for the CLI (FASE 5+): Typer reads each parameter's CLI flag name,
+# help text, and validation straight out of that call's arguments.
 extend-immutable-calls = [
     "fastapi.Depends",
     "fastapi.params.Depends",
     "fastapi.security.HTTPBearer",
     "app.core.dependencies.require_workspace_role",
+    "typer.Option",
+    "typer.Argument",
 ]
 
 [tool.ruff.format]
