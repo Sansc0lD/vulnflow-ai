@@ -1,6 +1,6 @@
 # VulnFlow AI — Full Project Context
 
-> Snapshot date: 2026-10-24. FASE 0-4 complete (monorepo scaffolding, Pydantic contracts, SQLAlchemy 2.0 database layer, domain/security engines, FastAPI routers + Celery worker).
+> Snapshot date: 2026-11-08. FASE 0-7 complete (monorepo scaffolding, contracts, DB layer, domain engines, routers + worker, CLI agent, Vue 3 SPA frontend, and full 18/18 edge-case resilience test suite).
 > This is a derived summary for onboarding/orientation. On any conflict, the authoritative sources are `SRS.md`, `SDD.md`, `EDGE_CASES_AND_RESILIENCE.md`, and `PLAN.md` in this same directory — re-check them, as this file can go stale.
 
 ## 1. Product Purpose & Key Constraints
