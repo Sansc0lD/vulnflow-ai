@@ -33,6 +33,7 @@ import socket
 import subprocess  # nosec: B404
 import sys
 import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -255,6 +256,9 @@ def _run_e2e_setup(api_url: str, email: str, password: str) -> tuple[str, str] |
     headers = {"Authorization": f"Bearer {token}"}
 
     # 3. Create Project
+    now_utc = datetime.now(UTC)
+    roe_start = (now_utc - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    roe_end = (now_utc + timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
     proj_resp = client.post(
         f"/api/v1/workspaces/{workspace_id}/projects",
         headers=headers,
@@ -262,8 +266,8 @@ def _run_e2e_setup(api_url: str, email: str, password: str) -> tuple[str, str] |
             "name": "E2E Test Project",
             "client_name": "Local Test Client",
             "target_scope": ["127.0.0.1", "localhost"],
-            "roe_start_date": "2026-11-01T00:00:00Z",
-            "roe_end_date": "2026-12-01T00:00:00Z",
+            "roe_start_date": roe_start,
+            "roe_end_date": roe_end,
         },
     )
     proj_resp.raise_for_status()
@@ -551,6 +555,8 @@ def cmd_status(args: argparse.Namespace) -> int:
         ("Redis", "127.0.0.1", int(os.environ.get("REDIS_PORT", 6379))),
         ("MinIO API", "127.0.0.1", int(os.environ.get("MINIO_API_PORT", 9000))),
         ("MinIO Console", "127.0.0.1", int(os.environ.get("MINIO_CONSOLE_PORT", 9001))),
+        ("Mailpit SMTP", "127.0.0.1", int(os.environ.get("MAILPIT_SMTP_PORT", 1025))),
+        ("Mailpit Web UI", "127.0.0.1", int(os.environ.get("MAILPIT_UI_PORT", 8025))),
     ]
     for name, host, port in services:
         if _is_port_in_use(host, port):
@@ -558,6 +564,20 @@ def cmd_status(args: argparse.Namespace) -> int:
         else:
             print(f"  [✗] {name}: not reachable on {host}:{port} (run 'docker compose up -d')")
 
+    return 0
+
+
+def cmd_totp(args: argparse.Namespace) -> int:
+    """Compute current 6-digit TOTP MFA code for seeded superadmin."""
+    api_dir = str(ROOT / "apps" / "api")
+    if api_dir not in sys.path:
+        sys.path.insert(0, api_dir)
+    from app.core.totp import compute_totp
+
+    secret = str(args.secret or os.environ.get("SEED_ADMIN_TOTP_SECRET", "JBSWY3DPEHPK3PXP"))
+    code = compute_totp(secret)
+    remaining = 30 - (int(time.time()) % 30)
+    print(f"TOTP Code: {code} (valid for ~{remaining}s)")
     return 0
 
 
@@ -639,6 +659,13 @@ def main() -> int:
         "status", help="Check local Docker services and connectivity"
     )
     sub_status.set_defaults(func=cmd_status)
+
+    # totp
+    sub_totp = subparsers.add_parser(
+        "totp", help="Print current 6-digit TOTP MFA code for superadmin login"
+    )
+    sub_totp.add_argument("--secret", default="", help="Base32 TOTP secret override")
+    sub_totp.set_defaults(func=cmd_totp)
 
     # If no arguments provided, default to 'up' (1-command to run everything)
     if len(sys.argv) == 1:
