@@ -2,24 +2,142 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --vf-obsidian: #050507;
+  --vf-surface: #08080B;
+  --vf-ink: #F5F5F3;
+  --vf-muted: #8A8D96;
+  --vf-hairline: rgba(255, 255, 255, 0.11);
+}
+
 @layer base {
+  html {
+    scroll-behavior: smooth;
+    color-scheme: dark;
+    scrollbar-color: rgba(255, 255, 255, 0.16) #050507;
+  }
+
   body {
-    @apply bg-background text-zinc-100;
+    background-color: var(--vf-obsidian);
+    color: var(--vf-ink);
+  }
+
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  a[href],
+  select:not(:disabled),
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled) {
+    cursor: pointer;
+  }
+
+  :focus-visible {
+    outline: 1.5px solid rgba(245, 245, 243, 0.85);
+    outline-offset: 2px;
   }
 }
 
-/* Custom scrollbars */
+@layer components {
+  .glass-panel {
+    position: relative;
+    background-color: var(--vf-surface);
+    border: 1px solid var(--vf-hairline);
+    border-radius: 0;
+  }
+
+  .glass-panel-solid {
+    position: relative;
+    background-color: var(--vf-surface);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 0;
+  }
+
+  .glass-interactive {
+    position: relative;
+  }
+
+  .vf-optical-lens {
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    background: rgba(255, 255, 255, 0.045);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+  }
+
+  .btn-platinum {
+    @apply inline-flex items-center justify-center gap-2 rounded-none bg-[#F5F5F3] text-[#050507] font-semibold text-xs sm:text-sm hover:bg-white active:scale-[0.99] transition-colors duration-150;
+  }
+
+  .btn-glass {
+    @apply inline-flex items-center justify-center gap-2 rounded-none border border-white/[0.18] bg-transparent text-[#F5F5F3] font-semibold text-xs sm:text-sm hover:bg-[#F5F5F3] hover:text-[#050507] active:scale-[0.99] transition-colors duration-150;
+  }
+
+  .input-glass {
+    @apply rounded-none bg-[#050507] border border-white/[0.15] hover:border-white/[0.28] focus:border-[#F5F5F3] text-[#F5F5F3] placeholder-[#8A8D96] transition-colors;
+  }
+}
+
+.vf-noise-overlay {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 160 160' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.022;
+}
+
+/* Custom WebKit scrollbars */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #09090b;
+  background: var(--vf-obsidian);
 }
 ::-webkit-scrollbar-thumb {
-  background: #27272a;
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.16);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+/* Vue Transitions */
+.vf-fade-enter-active,
+.vf-fade-leave-active {
+  transition: opacity 0.18s ease;
+}
+.vf-fade-enter-from,
+.vf-fade-leave-to {
+  opacity: 0;
+}
+
+.vf-modal-enter-active,
+.vf-modal-leave-active {
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.vf-modal-enter-from,
+.vf-modal-leave-to {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+.vf-toast-enter-active,
+.vf-toast-leave-active {
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.vf-toast-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+.vf-toast-leave-to {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

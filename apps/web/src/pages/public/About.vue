@@ -1,197 +1,264 @@
 <template>
-  <div class="flex flex-col min-h-screen">
-    <Navbar />
-
-    <section class="py-16 border-b border-border bg-gradient-to-b from-blue-950/10 to-background">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div class="text-center max-w-3xl mx-auto space-y-4">
-          <div class="inline-flex items-center space-x-2 px-3 py-1 rounded-full border border-blue-500/20 bg-blue-500/10 text-blue-400 text-xs font-mono">
-            <Cpu class="h-3.5 w-3.5" />
-            <span>ARSITEKTUR TERDISTRIBUSI C4 LEVEL 2/3</span>
+  <PublicLayout>
+    <!-- Header -->
+    <section class="border-b border-white/[0.1]">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-16 lg:pt-20 lg:pb-20">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-end">
+          <div class="lg:col-span-8 space-y-4">
+            <span class="font-mono text-[11px] uppercase tracking-[0.14em] text-[#8A8D96] block">
+              How it works
+            </span>
+            <h1 class="font-display text-4xl sm:text-5xl lg:text-6xl font-bold tracking-[-0.04em] text-[#F5F5F3] leading-[1.02]">
+              Designed for clarity, built for
+              <span class="font-serif italic font-normal text-white">client trust.</span>
+            </h1>
           </div>
-          <h1 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-            Pipeline Keamanan 4-Node VulnFlow AI
-          </h1>
-          <p class="text-sm sm:text-base text-zinc-400">
-            Klik salah satu simpul pipa di bawah ini untuk melihat mitigasi ancaman STRIDE, isolasi multi-tenant, dan perlindungan Zero-PoC.
+          <p class="lg:col-span-4 text-sm text-[#8A8D96] leading-relaxed">
+            Follow our four-step workflow that keeps raw client evidence encrypted locally while delivering executive reports fast.
           </p>
         </div>
       </div>
     </section>
 
-    <!-- Interactive 4-Node Pipeline (UC-02 Desweb) -->
-    <section class="py-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <!-- Node Selector Bar -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <button
-          v-for="(node, index) in nodes"
-          :key="node.id"
-          @click="activeNodeIndex = index"
-          :class="[
-            'p-4 rounded-xl border text-left transition-all relative overflow-hidden',
-            activeNodeIndex === index
-              ? 'border-blue-500 bg-blue-950/20 shadow-lg shadow-blue-500/10'
-              : 'border-border bg-surface hover:bg-surface-elevated'
-          ]"
-        >
-          <div class="flex items-center justify-between mb-2">
-            <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
-              NODE 0{{ index + 1 }}
-            </span>
-            <component :is="node.icon" :class="['h-5 w-5', activeNodeIndex === index ? 'text-blue-400' : 'text-zinc-500']" />
-          </div>
-          <h3 class="text-xs sm:text-sm font-semibold text-white truncate">{{ node.name }}</h3>
-          <p class="text-[11px] text-zinc-400 truncate mt-0.5">{{ node.subtitle }}</p>
-        </button>
-      </div>
-
-      <!-- Active Node Detail Card -->
-      <div class="rounded-xl border border-border bg-surface p-6 sm:p-8 space-y-6">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border pb-6">
-          <div class="space-y-1">
-            <div class="flex items-center space-x-3">
-              <span class="text-xs font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">
-                NODE {{ activeNodeIndex + 1 }} OF 4
-              </span>
-              <h2 class="text-xl font-bold text-white">{{ activeNode.name }}</h2>
-            </div>
-            <p class="text-xs sm:text-sm text-zinc-400 font-mono">{{ activeNode.location }}</p>
-          </div>
-
-          <div class="flex items-center space-x-2">
-            <span class="text-xs text-zinc-500 font-mono">STRIDE MITIGATION:</span>
-            <span class="text-xs font-mono font-semibold px-2.5 py-1 rounded bg-zinc-800 text-emerald-400 border border-zinc-700">
-              {{ activeNode.stride }}
-            </span>
-          </div>
+    <!-- Ruled Comparison (Zero Cards) -->
+    <section class="border-b border-white/[0.1]">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/[0.1]">
+        <div class="py-10 md:pr-10 space-y-3">
+          <span class="font-mono text-[11px] uppercase tracking-[0.12em] text-red-300 block">
+            Traditional Reporting
+          </span>
+          <h2 class="text-xl font-display font-semibold text-[#F5F5F3]">
+            Manual spreadsheets &amp; prompt risks
+          </h2>
+          <p class="text-sm text-[#8A8D96] leading-relaxed max-w-md">
+            Hours of engagement time go toward sorting raw XML or JSON files, recalculating risk scores by hand, and pasting evidence into document editors or public chat tools.
+          </p>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="space-y-4">
-            <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-300">Peran & Tanggung Jawab</h4>
-            <p class="text-xs sm:text-sm text-zinc-300 leading-relaxed">{{ activeNode.description }}</p>
-
-            <div class="space-y-2 pt-2">
-              <h5 class="text-xs font-semibold text-zinc-300">Spesifikasi Kepatuhan & Jaminan:</h5>
-              <ul class="space-y-1.5 text-xs text-zinc-400">
-                <li v-for="(spec, i) in activeNode.specs" :key="i" class="flex items-start gap-2">
-                  <span class="text-blue-400 font-bold">•</span>
-                  <span>{{ spec }}</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-
-          <div class="space-y-4">
-            <h4 class="text-xs font-semibold uppercase tracking-wider text-zinc-300">Cuplikan Implementasi Kode</h4>
-            <div class="rounded-lg bg-black/80 border border-border p-4 font-mono text-[11px] sm:text-xs text-zinc-300 overflow-x-auto leading-relaxed">
-              <pre>{{ activeNode.codeSnippet }}</pre>
-            </div>
-          </div>
+        <div class="py-10 md:pl-10 space-y-3">
+          <span class="font-mono text-[11px] uppercase tracking-[0.12em] text-emerald-400 block">
+            With VulnFlow
+          </span>
+          <h2 class="text-xl font-display font-semibold text-[#F5F5F3]">
+            Private evidence &amp; instant drafts
+          </h2>
+          <p class="text-sm text-[#D4D4D8] leading-relaxed max-w-md">
+            Scans run locally on your machine. Technical proof stays encrypted inside your workspace while only sanitized titles and scores are used to draft clean client narratives.
+          </p>
         </div>
       </div>
     </section>
 
-    <Footer />
-  </div>
+    <!-- Interactive 4-Step Walkthrough (UC-02) -->
+    <section class="py-16 lg:py-20 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 w-full space-y-10">
+      <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/[0.1] pb-5">
+        <div>
+          <span class="font-mono text-[11px] uppercase tracking-[0.14em] text-[#8A8D96] block">
+            Reporting Flow
+          </span>
+          <h2 class="font-display text-2xl sm:text-3xl font-bold tracking-tight text-[#F5F5F3] mt-1">
+            Four steps from scan to deliverable
+          </h2>
+        </div>
+        <span class="font-mono text-xs text-[#8A8D96] tabular-nums">
+          Stage {{ String(activeStepIndex + 1).padStart(2, '0') }} / {{ String(workflowSteps.length).padStart(2, '0') }}
+        </span>
+      </div>
+
+      <!-- Ruled Horizontal Step Tabs -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border border-white/[0.12] divide-y sm:divide-y-0 sm:divide-x divide-white/[0.1] bg-[#08080B]">
+        <button
+          v-for="(step, index) in workflowSteps"
+          :key="step.id"
+          type="button"
+          @click="activeStepIndex = index"
+          :aria-pressed="activeStepIndex === index"
+          :class="[
+            'p-5 text-left transition-colors flex flex-col justify-between gap-4',
+            activeStepIndex === index
+              ? 'bg-[#F5F5F3] text-[#050507]'
+              : 'text-[#8A8D96] hover:text-[#F5F5F3] hover:bg-white/[0.03]',
+          ]"
+        >
+          <div class="flex items-center justify-between w-full font-mono text-xs">
+            <span class="font-bold">{{ String(index + 1).padStart(2, '0') }}</span>
+            <span class="text-[10px] uppercase tracking-wider opacity-75">
+              {{ activeStepIndex === index ? 'Active' : 'Select' }}
+            </span>
+          </div>
+          <div>
+            <h3 :class="['text-sm font-display font-semibold', activeStepIndex === index ? 'text-[#050507]' : 'text-[#F5F5F3]']">
+              {{ step.name }}
+            </h3>
+            <p :class="['text-xs mt-1', activeStepIndex === index ? 'text-[#050507]/75' : 'text-[#8A8D96]']">
+              {{ step.subtitle }}
+            </p>
+          </div>
+        </button>
+      </div>
+
+      <!-- Active Step Detail Spread (Flat Hairline Columns) -->
+      <div class="border border-white/[0.14] bg-[#08080B]">
+        <div class="p-6 sm:p-8 border-b border-white/[0.1] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <h3 class="text-xl font-display font-semibold text-[#F5F5F3]">{{ activeStep.name }}</h3>
+            <p class="font-mono text-xs text-[#8A8D96]">{{ activeStep.context }}</p>
+          </div>
+          <span class="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wider px-2.5 py-1 border border-emerald-400/30 bg-emerald-500/10 text-emerald-300 self-start sm:self-auto">
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-400" aria-hidden="true" />
+            <span>{{ activeStep.guarantee }}</span>
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-white/[0.1]">
+          <div class="p-6 sm:p-8 space-y-4">
+            <h4 class="font-mono text-[11px] uppercase tracking-[0.12em] text-[#8A8D96]">What happens</h4>
+            <p class="text-sm text-[#F5F5F3] leading-relaxed">{{ activeStep.description }}</p>
+
+            <ul class="space-y-2.5 text-xs sm:text-sm text-[#D4D4D8] pt-2 border-t border-white/[0.08]">
+              <li v-for="(item, i) in activeStep.highlights" :key="i" class="flex items-start gap-2.5">
+                <Check class="h-4 w-4 text-[#F5F5F3] shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{{ item }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="p-6 sm:p-8 space-y-4">
+            <h4 class="font-mono text-[11px] uppercase tracking-[0.12em] text-[#8A8D96]">Privacy &amp; safeguards</h4>
+            <ul class="divide-y divide-white/[0.08] border-y border-white/[0.08]">
+              <li
+                v-for="(rule, rIdx) in activeStep.safeguards"
+                :key="rIdx"
+                class="py-3.5 flex items-start gap-2.5 text-xs sm:text-sm text-[#D4D4D8] leading-relaxed"
+              >
+                <Shield class="h-4 w-4 text-emerald-400 shrink-0 mt-0.5" aria-hidden="true" />
+                <span>{{ rule }}</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ruled 4-Column Trust Foundations Ledger -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-y border-white/[0.12] divide-y sm:divide-y-0 sm:divide-x divide-white/[0.1]">
+        <div
+          v-for="(item, idx) in foundations"
+          :key="item.title"
+          class="py-7 sm:px-6 first:sm:pl-0 last:sm:pr-0 space-y-2"
+        >
+          <span class="font-mono text-xs text-[#8A8D96] block">{{ String(idx + 1).padStart(2, '0') }}</span>
+          <h4 class="text-sm font-display font-semibold text-[#F5F5F3]">{{ item.title }}</h4>
+          <p class="text-xs text-[#8A8D96] leading-relaxed">{{ item.desc }}</p>
+        </div>
+      </div>
+    </section>
+  </PublicLayout>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
-import Navbar from '@/components/layout/Navbar.vue'
-import Footer from '@/components/layout/Footer.vue'
-import { Terminal, Shield, Sparkles, FileText, Cpu } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { Check, Shield } from 'lucide-vue-next'
+import PublicLayout from '@/components/layout/PublicLayout.vue'
 
-const activeNodeIndex = ref(0)
+const activeStepIndex = ref(0)
 
-const nodes = [
+const workflowSteps = [
   {
-    id: 'node1',
-    name: 'Local CLI Agent',
-    subtitle: 'Typer & Rich Engine (Python 3.12+)',
-    icon: Terminal,
-    location: 'apps/cli/vulnflow/ (Client-side Machine)',
-    stride: 'Information Disclosure & Spoofing',
+    id: 'step1',
+    name: 'Local Scan',
+    subtitle: 'Run tools on your own machine',
+    context: 'Works with macOS, Linux, and Windows',
+    guarantee: 'No external cloud scanning',
     description:
-      'Agen pemindaian lokal dijalankan langsung di mesin pentester (Kali/Parrot/macOS/Windows). Cloud SaaS VulnFlow AI tidak pernah melancarkan pemindaian aktif secara langsung ke infrastruktur target klien.',
-    specs: [
-      'Wrapper aman eksekusi biner Nuclei v3 dan Nmap XML (EC-06).',
-      'Chunked idempotent upload via header Idempotency-Key (EC-07).',
-      'Penyimpanan konfigurasi aman di ~/.vulnflow/config.json (mode 0o600).',
+      'Security teams run Nmap or Nuclei directly from their own authorized workstation. VulnFlow never launches active network scans from cloud servers.',
+    highlights: [
+      'Supports standard Nmap XML and Nuclei JSONL scan outputs.',
+      'Resumable chunked uploads prevent duplicate findings on unstable networks.',
+      'Local API credentials stay scoped to your team workspace.',
     ],
-    codeSnippet: `# apps/cli/vulnflow/ingest_client.py
-headers = {
-    "X-VulnFlow-API-Key": api_key,
-    "Idempotency-Key": f"{file_hash}:{chunk_idx}"
-}
-client.post("/api/v1/workspaces/{w_id}/projects/{p_id}/findings/batch", ...)`
+    safeguards: [
+      'Client networks remain reachable only from your authorized test machine.',
+      'Duplicate scan runs are automatically merged cleanly.',
+      'API keys can be issued or revoked at any time from Settings.',
+    ],
   },
   {
-    id: 'node2',
-    name: 'Scope Gateway',
-    subtitle: 'CIDR & Nested Subdomain Enforcer',
-    icon: Shield,
-    location: 'apps/api/app/domain/scope.py (SaaS API)',
-    stride: 'Elevation of Privilege & Tampering',
+    id: 'step2',
+    name: 'Scope Check',
+    subtitle: 'Keep out-of-scope targets separate',
+    context: 'Automatic target and schedule validation',
+    guarantee: 'Automatic boundary guard',
     description:
-      'Memeriksa setiap temuan hasil scan terhadap daftar target scope dan rentang waktu Rules of Engagement (ROE). Temuan di luar cakupan sah akan otomatis dikarantina (is_quarantined = true).',
-    specs: [
-      'Pencocokan FQDN hirarkis & wildcard (*.target.com) (EC-04).',
-      'Pengecekan subnet IPv4/IPv6 via pustaka standar ipaddress.',
-      'Validasi rentang waktu ROE berpresisi timezone TIMESTAMPTZ (EC-05).',
+      'Every imported finding is checked against the project’s approved domains, IP ranges, and testing window before appearing in report candidates.',
+    highlights: [
+      'Matches domains, wildcard subdomains, and CIDR IP ranges.',
+      'Checks finding timestamps against project start and end windows.',
+      'Holds aside unexpected targets until a manager reviews them.',
     ],
-    codeSnippet: `# apps/api/app/domain/scope.py
-def is_target_in_scope(target: str, scope_rules: list[str]) -> bool:
-    # Memeriksa target terhadap domain & CIDR whitelist
-    for rule in scope_rules:
-        if matches_rule(target, rule):
-            return True
-    return False`
+    safeguards: [
+      'Out-of-scope discoveries cannot accidentally enter client reports.',
+      'Only workspace managers can approve or release held findings.',
+      'Full project scope rules stay clearly visible to all team members.',
+    ],
   },
   {
-    id: 'node3',
-    name: 'Zero-PoC AI Sanitizer',
-    subtitle: 'Data Sanitizer & CWE Fallback',
-    icon: Sparkles,
-    location: 'apps/api/app/domain/sanitizer.py & fallback.py',
-    stride: 'Information Disclosure & Denial of Service',
+    id: 'step3',
+    name: 'Private Summary',
+    subtitle: 'Clear writing without exposing proof',
+    context: 'Human-reviewed report drafting',
+    guarantee: 'Technical proof stays encrypted',
     description:
-      'Menjaga kerahasiaan bukti eksploitasi klien dengan aturan ketat: teks payload, IP internal, dan kredensial dilarang keras diteruskan ke LLM. Jika kuota LLM habis, sistem beralih ke katalog CWE in-memory tanpa gagal.',
-    specs: [
-      'Whitelist kolom ketat: hanya title, cwe_id, cvss_score, severity yang lolos.',
-      'Regex datar anti-ReDoS membersihkan IP & hostname banner (EC-13).',
-      'Pemuatan in-memory O(1) CWE catalog fallback saat timeout/429 (EC-14).',
+      'Raw evidence payloads are encrypted at rest inside your workspace. Only issue names, categories, and risk scores are used to draft readable executive narratives.',
+    highlights: [
+      'Removes hostnames, IP addresses, paths, and raw proof payloads automatically.',
+      'Drafts plain-language business impact and fix guidance quickly.',
+      'Falls back seamlessly to curated guidance templates whenever offline.',
     ],
-    codeSnippet: `# apps/api/app/domain/sanitizer.py
-def whitelist_finding_metadata(raw: dict) -> dict:
-    return {
-        "title": sanitize_text(raw["title"]),
-        "cwe_id": raw["cwe_id"],
-        "cvss_score": float(raw["cvss_score"]),
-        "severity": raw["severity"]
-    }`
+    safeguards: [
+      'Zero client secrets or exploit proof ever reach external AI services.',
+      'Reviewers can edit every section and approve drafts before export.',
+      'Version history preserves earlier drafts whenever you regenerate.',
+    ],
   },
   {
-    id: 'node4',
-    name: 'WeasyPrint Engine',
-    subtitle: 'Anti-SSRF SafeURLFetcher & S3 Vault',
-    icon: FileText,
-    location: 'apps/api/app/services/safe_fetcher.py & Celery Worker',
-    stride: 'Server-Side Request Forgery (SSRF)',
+    id: 'step4',
+    name: 'Branded PDF',
+    subtitle: 'Deliver clean client-ready reports',
+    context: 'Asynchronous PDF generation',
+    guarantee: 'Safe asset handling',
     description:
-      'Merender laporan PDF eksekutif dan teknis menggunakan HTML/CSS. SafeURLFetcher mencegah serangan SSRF saat WeasyPrint memuat gambar/aset eksternal, memblokir akses ke IP privat dan cloud metadata.',
-    specs: [
-      'Resolusi IP tunggal & pinning transport mencegah DNS Rebinding.',
-      'Blokir mutlak terhadap 127.0.0.0/8, 169.254.0.0/16, RFC 1918, file://.',
-      'Pemberian watermark otomatis pada akun Free Tier; white-label pada Pro (UC-14).',
+      'Generate crisp, print-ready A4 PDF reports styled with your agency logo, brand palette, CVSS risk charts, and custom confidentiality notice.',
+    highlights: [
+      'Automatic contrast calculation keeps cover typography legible.',
+      'Include or hide cover pages and CVSS radar summaries per report.',
+      'Download archived versions any time from project history.',
     ],
-    codeSnippet: `# apps/api/app/services/safe_fetcher.py
-def validate_target_ip(ip_str: str) -> None:
-    ip = ipaddress.ip_address(ip_str)
-    if ip.is_private or ip.is_loopback or ip.is_link_local:
-        raise SSRFBlockedError(f"Access to private IP {ip} is strictly forbidden.")`
+    safeguards: [
+      'External brand assets are validated to prevent private network lookups.',
+      'Viewers see approved reports without accessing sensitive raw payloads.',
+      'White-label output comes standard on Pro and Enterprise plans.',
+    ],
   },
 ]
 
-const activeNode = computed(() => nodes[activeNodeIndex.value])
+const activeStep = computed(() => workflowSteps[activeStepIndex.value] ?? workflowSteps[0])
+
+const foundations = [
+  {
+    title: 'Standardized risk scoring',
+    desc: 'Consistent FIRST CVSS v3.1 calculations across scan imports, workspace review, and final PDFs.',
+  },
+  {
+    title: 'Consistent taxonomy',
+    desc: 'Uniform CWE categorization across Nmap, Nuclei, and manually logged findings.',
+  },
+  {
+    title: 'Role-based access',
+    desc: 'Separate permissions for Managers, Pentesters, and read-only Client Viewers.',
+  },
+  {
+    title: 'Complete activity log',
+    desc: 'Every status change, evidence access, and report export is logged for accountability.',
+  },
+]
 </script>

@@ -1,232 +1,658 @@
 <template>
-  <AppLayout>
+  <AppLayout :pipeline-step="1">
     <template #header-title>
       <div>
-        <h1 class="text-base font-bold text-white">Manajemen Proyek Audit & Target Scope ROE</h1>
-        <p class="text-xs text-zinc-400 font-mono">WORKSPACE: Agensi Pentest Nusantara</p>
+        <h1 class="text-base font-display font-semibold text-[#F5F5F3] tracking-tight">
+          Projects
+        </h1>
+        <p class="text-xs text-[#8A8D96] truncate">
+          {{ session.state.activeWorkspace?.name || 'Workspace' }}
+        </p>
       </div>
     </template>
 
     <div class="space-y-6 max-w-7xl mx-auto">
-      <div class="flex items-center justify-between">
+      <!-- Top Action & Filter Row -->
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.1] pb-5">
         <div>
-          <h2 class="text-lg font-bold text-white">Daftar Proyek Audit Aktif</h2>
-          <p class="text-xs text-zinc-400">Tentukan batas cakupan (target scope) dan rentang waktu Rules of Engagement (ROE).</p>
+          <h2 class="text-lg font-display font-semibold text-[#F5F5F3] tracking-tight">Projects &amp; Scope</h2>
+          <p class="text-xs sm:text-sm text-[#8A8D96]">
+            Manage authorized target scopes, engagement schedules, and project leads.
+          </p>
         </div>
 
-        <button
-          @click="showCreateModal = true"
-          class="inline-flex items-center space-x-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white shadow hover:bg-blue-500 transition-colors"
-        >
-          <Plus class="h-3.5 w-3.5" />
-          <span>Buat Proyek Audit Baru</span>
-        </button>
-      </div>
-
-      <!-- Project Cards Grid -->
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <div
-          v-for="p in projects"
-          :key="p.id"
-          class="rounded-xl border border-border bg-surface p-5 space-y-4 hover:border-zinc-700 transition-colors"
-        >
-          <div class="flex items-start justify-between border-b border-border pb-3">
-            <div class="space-y-0.5">
-              <span class="text-[10px] font-mono text-zinc-500 block">ID: {{ p.id }}</span>
-              <h3 class="text-sm font-bold text-white">{{ p.name }}</h3>
-              <p class="text-xs text-zinc-400">{{ p.client }}</p>
-            </div>
-            <span class="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-              ROE AKTIF
-            </span>
+        <div class="flex flex-wrap items-center gap-2.5">
+          <div class="relative min-w-[200px]">
+            <Search
+              class="h-3.5 w-3.5 text-[#8A8D96] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+              aria-hidden="true"
+            />
+            <label for="project-search" class="sr-only">Search projects or clients</label>
+            <input
+              id="project-search"
+              v-model.trim="searchQuery"
+              type="text"
+              placeholder="Search projects or clients..."
+              class="input-glass w-full pl-8 pr-3 py-2 text-xs"
+            />
           </div>
 
-          <div class="space-y-2 text-xs font-mono">
-            <div>
-              <span class="text-zinc-500 text-[10px] block">RENTANG ROE (TIMESTAMPTZ, EC-05):</span>
-              <span class="text-zinc-300">{{ p.roeStart }} s.d. {{ p.roeEnd }}</span>
+          <label for="project-status-filter" class="sr-only">Filter project status</label>
+          <select
+            id="project-status-filter"
+            v-model="statusFilter"
+            class="input-glass px-3 py-2 text-xs text-[#F5F5F3]"
+          >
+            <option value="ALL">All ({{ session.state.projects.length }})</option>
+            <option value="ACTIVE">Active</option>
+            <option value="ARCHIVED">Archived</option>
+          </select>
+
+          <button
+            v-if="canManageProjects"
+            type="button"
+            @click="openCreateModal"
+            class="btn-platinum px-4 py-2 text-xs"
+          >
+            <Plus class="h-3.5 w-3.5" aria-hidden="true" />
+            <span>New project</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Post-Create Guided Next-Step Banner -->
+      <div
+        v-if="recentlyCreatedProject"
+        class="border border-emerald-400/35 bg-emerald-500/10 p-4 flex flex-wrap items-center justify-between gap-3"
+      >
+        <div class="space-y-0.5">
+          <div class="text-xs font-semibold text-emerald-300 flex items-center gap-1.5">
+            <CheckCircle2 class="h-4 w-4" aria-hidden="true" />
+            <span>Project "{{ recentlyCreatedProject.name }}" is ready for findings</span>
+          </div>
+          <p class="text-xs text-[#D4D4D8]">
+            Next step: import Nmap or Nuclei scans via CLI or log findings manually.
+          </p>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            @click="openCliForProject(recentlyCreatedProject)"
+            class="btn-glass px-3 py-1.5 text-xs"
+          >
+            <Terminal class="h-3.5 w-3.5" />
+            <span>Import via CLI</span>
+          </button>
+          <router-link
+            to="/app/triage"
+            class="btn-platinum px-3 py-1.5 text-xs"
+          >
+            <span>Open Findings</span>
+            <ArrowRight class="h-3.5 w-3.5" />
+          </router-link>
+          <button
+            type="button"
+            @click="recentlyCreatedProject = null"
+            class="p-1.5 text-[#8A8D96] hover:text-[#F5F5F3] hover:bg-white/[0.06] transition-colors"
+            aria-label="Dismiss guide"
+          >
+            <X class="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <EmptyState
+        v-if="filteredProjects.length === 0"
+        :icon="FolderGit2"
+        :title="session.state.projects.length === 0 ? 'No projects yet' : 'No matching projects'"
+        :description="
+          session.state.projects.length === 0
+            ? 'Create your first project to set authorized target scopes and engagement dates.'
+            : 'Adjust your search query or status filter to view more projects.'
+        "
+        :action-label="
+          session.state.projects.length === 0 && canManageProjects
+            ? 'New project'
+            : session.state.projects.length > 0
+              ? 'Reset filters'
+              : ''
+        "
+        @action="session.state.projects.length === 0 ? openCreateModal() : resetFilters()"
+      />
+
+      <!-- Ruled Project Ledger Grid -->
+      <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 border-t border-l border-white/[0.11] bg-[#08080B]">
+        <div
+          v-for="p in filteredProjects"
+          :key="p.id"
+          :class="[
+            'p-6 flex flex-col justify-between space-y-5 border-r border-b border-white/[0.11]',
+            p.id === session.state.activeProjectId
+              ? 'bg-white/[0.03] border-t-2 border-t-[#F5F5F3]'
+              : '',
+          ]"
+        >
+          <div class="space-y-4">
+            <div class="flex items-start justify-between border-b border-white/[0.08] pb-3.5 gap-2">
+              <div class="space-y-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span
+                    v-if="p.id === session.state.activeProjectId"
+                    class="font-mono text-[10px] uppercase tracking-wider font-semibold px-2 py-0.5 bg-[#F5F5F3] text-[#050507]"
+                  >
+                    Active
+                  </span>
+                  <span class="font-mono text-[11px] text-[#8A8D96] truncate">{{ p.client_name }}</span>
+                </div>
+                <h3 class="text-sm sm:text-base font-display font-semibold text-[#F5F5F3] truncate">
+                  {{ p.name }}
+                </h3>
+              </div>
+              <StatusBadge :status="getRoeState(p)" />
             </div>
 
-            <div>
-              <span class="text-zinc-500 text-[10px] block">TARGET SCOPE WHITELIST:</span>
-              <div class="flex flex-wrap gap-1 mt-1">
-                <span
-                  v-for="(target, i) in p.scope"
-                  :key="i"
-                  class="px-2 py-0.5 rounded bg-surface-elevated border border-border text-[11px] text-zinc-300"
+            <div class="space-y-3 text-xs">
+              <div>
+                <span class="font-mono text-[10px] uppercase tracking-wider text-[#8A8D96] block">
+                  Schedule ({{ p.timezone }})
+                </span>
+                <span class="text-[#D4D4D8] font-mono text-[11px] block mt-0.5 tabular-nums">
+                  {{ formatDateTime(p.roe_start_date) }} – {{ formatDateTime(p.roe_end_date) }}
+                </span>
+              </div>
+
+              <div>
+                <span class="font-mono text-[10px] uppercase tracking-wider text-[#8A8D96] block">
+                  Authorized Targets ({{ p.target_scope.length }})
+                </span>
+                <div class="flex flex-wrap gap-1.5 mt-1.5 font-mono">
+                  <span
+                    v-for="(target, i) in visibleScopes(p)"
+                    :key="i"
+                    class="px-2 py-0.5 bg-[#050507] border border-white/[0.1] text-[11px] text-[#D4D4D8]"
+                  >
+                    {{ target }}
+                  </span>
+                  <button
+                    v-if="p.target_scope.length > 4"
+                    type="button"
+                    @click="toggleScopeExpand(p.id)"
+                    class="px-2 py-0.5 border border-white/[0.16] text-[11px] font-sans text-[#F5F5F3] hover:bg-white/[0.06] transition-colors"
+                  >
+                    {{ expandedScopes[p.id] ? 'Show less' : `+${p.target_scope.length - 4} more` }}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label
+                  :for="`lead-select-${p.id}`"
+                  class="font-mono text-[10px] uppercase tracking-wider text-[#8A8D96] block mb-1"
                 >
-                  {{ target }}
+                  Project Lead
+                </label>
+                <select
+                  v-if="isManager"
+                  :id="`lead-select-${p.id}`"
+                  :value="p.lead_pentester_id || ''"
+                  @change="handleAssignLead(p, $event)"
+                  class="input-glass w-full px-2.5 py-1.5 text-xs"
+                >
+                  <option value="" disabled>Select project lead...</option>
+                  <option v-for="m in eligibleLeads" :key="m.user_id" :value="m.user_id">
+                    {{ m.full_name }} ({{ formatRole(m.role) }})
+                  </option>
+                </select>
+                <span v-else class="text-[#D4D4D8] text-xs">
+                  {{ resolveMemberName(p.lead_pentester_id) }}
                 </span>
               </div>
             </div>
           </div>
 
-          <div class="border-t border-border pt-3 flex items-center justify-between">
-            <router-link
-              to="/app/triage"
-              class="text-xs font-semibold text-blue-400 hover:text-blue-300 flex items-center gap-1"
-            >
-              <span>Buka Triase Temuan</span>
-              <ArrowRight class="h-3 w-3" />
-            </router-link>
+          <!-- Card Footer Actions -->
+          <div class="border-t border-white/[0.08] pt-3.5 flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2.5">
+              <button
+                type="button"
+                @click="openInTriage(p)"
+                class="text-xs font-medium text-[#F5F5F3] underline underline-offset-4 hover:text-white inline-flex items-center gap-1 transition-colors"
+              >
+                <span>Open Findings</span>
+                <ArrowRight class="h-3.5 w-3.5" />
+              </button>
 
-            <button
-              @click="handleCopyApiKey(p.apiKey)"
-              class="text-[11px] font-mono text-zinc-400 hover:text-white px-2 py-1 rounded bg-surface-elevated border border-border"
-            >
-              Salin API Key CLI
-            </button>
+              <button
+                v-if="p.id !== session.state.activeProjectId"
+                type="button"
+                @click="activateProject(p)"
+                class="text-xs text-[#D4D4D8] hover:text-[#F5F5F3] px-2.5 py-1 border border-white/[0.12] hover:border-white/[0.25] transition-colors"
+              >
+                Set Active
+              </button>
+            </div>
+
+            <div class="flex items-center gap-1.5">
+              <button
+                type="button"
+                @click="openCliForProject(p)"
+                class="text-xs text-[#F5F5F3] px-2.5 py-1 border border-white/[0.12] hover:bg-[#F5F5F3] hover:text-[#050507] inline-flex items-center gap-1 transition-colors"
+                title="Show CLI upload commands for this project"
+              >
+                <Terminal class="h-3 w-3" aria-hidden="true" />
+                <span>CLI</span>
+              </button>
+              <button
+                type="button"
+                @click="copyProjectId(p.id)"
+                class="text-xs text-[#D4D4D8] px-2.5 py-1 border border-white/[0.12] hover:bg-white/[0.06] transition-colors"
+                title="Copy Project ID"
+              >
+                ID
+              </button>
+              <button
+                v-if="canManageProjects"
+                type="button"
+                @click="openEditModal(p)"
+                class="text-xs text-[#D4D4D8] px-2.5 py-1 border border-white/[0.12] hover:bg-white/[0.06] transition-colors"
+              >
+                Edit
+              </button>
+            </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Create Project Modal -->
-    <div
-      v-if="showCreateModal"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+    <!-- Create / Edit Project Modal -->
+    <BaseModal
+      :open="showModal"
+      :title="editingProjectId ? 'Edit Project & Scope' : 'New Project'"
+      subtitle="Define authorized targets and engagement dates to keep scan imports within scope."
+      max-width="lg"
+      @close="showModal = false"
     >
-      <div class="w-full max-w-lg rounded-xl border border-border bg-surface p-6 space-y-4 shadow-2xl">
-        <div class="flex items-center justify-between border-b border-border pb-3">
-          <h3 class="text-sm font-bold text-white">Inisialisasi Proyek Audit & Definisi ROE</h3>
-          <button @click="showCreateModal = false" class="text-zinc-400 hover:text-white">
-            <X class="h-4 w-4" />
-          </button>
+      <form id="project-form" @submit.prevent="handleSaveProject" class="space-y-4 text-xs">
+        <div class="space-y-1.5">
+          <label for="proj-name" class="font-medium text-[#D4D4D8] block">Project name</label>
+          <input
+            id="proj-name"
+            v-model.trim="form.name"
+            type="text"
+            required
+            placeholder="Core Web Platform Assessment"
+            class="input-glass w-full px-3 py-2 text-xs"
+          />
         </div>
 
-        <form @submit.prevent="handleCreateProject" class="space-y-4 text-xs">
-          <div class="space-y-1">
-            <label class="font-medium text-zinc-300">Nama Proyek:</label>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="space-y-1.5">
+            <label for="proj-client" class="font-medium text-[#D4D4D8] block">
+              Client name
+            </label>
             <input
-              v-model="newProject.name"
+              id="proj-client"
+              v-model.trim="form.client_name"
               type="text"
               required
-              placeholder="Audit Core Banking Web 2026"
-              class="w-full bg-background border border-border rounded-lg px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+              placeholder="Acme Corp"
+              class="input-glass w-full px-3 py-2 text-xs"
             />
           </div>
 
-          <div class="space-y-1">
-            <label class="font-medium text-zinc-300">Nama Klien / Organisasi:</label>
+          <div class="space-y-1.5">
+            <label for="proj-timezone" class="font-medium text-[#D4D4D8] block">Timezone</label>
+            <select
+              id="proj-timezone"
+              v-model="form.timezone"
+              class="input-glass w-full px-3 py-2 text-xs"
+            >
+              <option value="Asia/Jakarta">Asia/Jakarta (WIB)</option>
+              <option value="Asia/Makassar">Asia/Makassar (WITA)</option>
+              <option value="Asia/Jayapura">Asia/Jayapura (WIT)</option>
+              <option value="Asia/Singapore">Asia/Singapore</option>
+              <option value="UTC">UTC</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="space-y-1.5">
+            <label for="proj-roe-start" class="font-medium text-[#D4D4D8] block">Start date &amp; time</label>
             <input
-              v-model="newProject.client"
-              type="text"
+              id="proj-roe-start"
+              v-model="form.roeStartLocal"
+              type="datetime-local"
               required
-              placeholder="PT Bank Bukopin Tbk"
-              class="w-full bg-background border border-border rounded-lg px-3 py-2 text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
+              class="input-glass w-full px-3 py-2 text-xs"
             />
           </div>
-
-          <div class="grid grid-cols-2 gap-3">
-            <div class="space-y-1">
-              <label class="font-medium text-zinc-300">Tanggal Mulai ROE:</label>
-              <input
-                v-model="newProject.roeStart"
-                type="date"
-                required
-                class="w-full bg-background border border-border rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-              />
-            </div>
-            <div class="space-y-1">
-              <label class="font-medium text-zinc-300">Tanggal Selesai ROE:</label>
-              <input
-                v-model="newProject.roeEnd"
-                type="date"
-                required
-                class="w-full bg-background border border-border rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          <div class="space-y-1">
-            <label class="font-medium text-zinc-300">Target Scope Whitelist (pisahkan baris):</label>
-            <textarea
-              v-model="newProject.scopeRaw"
-              rows="3"
+          <div class="space-y-1.5">
+            <label for="proj-roe-end" class="font-medium text-[#D4D4D8] block">End date &amp; time</label>
+            <input
+              id="proj-roe-end"
+              v-model="form.roeEndLocal"
+              type="datetime-local"
               required
-              placeholder="*.bukopin.co.id&#10;103.20.15.0/24"
-              class="w-full bg-background border border-border rounded-lg p-3 font-mono text-white placeholder-zinc-500 focus:outline-none focus:border-blue-500"
-            ></textarea>
+              class="input-glass w-full px-3 py-2 text-xs"
+            />
           </div>
+        </div>
 
-          <div class="flex justify-end space-x-2 pt-2 border-t border-border">
+        <div v-if="editingProjectId" class="space-y-1.5">
+          <label for="proj-status" class="font-medium text-[#D4D4D8] block">Project status</label>
+          <select
+            id="proj-status"
+            v-model="form.status"
+            class="input-glass w-full px-3 py-2 text-xs"
+          >
+            <option value="ACTIVE">Active (Accepts imports)</option>
+            <option value="ARCHIVED">Archived (Imports paused)</option>
+          </select>
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="proj-scope" class="font-medium text-[#D4D4D8] block">
+            Authorized target scope (one domain, IP, or CIDR per line)
+          </label>
+          <textarea
+            id="proj-scope"
+            v-model="form.scopeRaw"
+            rows="3"
+            required
+            placeholder="*.example.com&#10;10.20.0.0/24"
+            class="input-glass w-full p-3 font-mono text-xs"
+          ></textarea>
+        </div>
+      </form>
+
+      <template #footer>
+        <div class="w-full flex flex-wrap items-center justify-between gap-3">
+          <router-link to="/app/settings" class="text-xs text-[#F5F5F3] underline underline-offset-4 hover:text-white">
+            Manage CLI API keys in Settings
+          </router-link>
+          <div class="flex items-center gap-2">
             <button
               type="button"
-              @click="showCreateModal = false"
-              class="px-4 py-2 rounded-lg border border-border text-zinc-400 hover:text-white"
+              @click="showModal = false"
+              class="btn-glass px-4 py-2 text-xs"
             >
-              Batal
+              Cancel
             </button>
             <button
               type="submit"
-              class="px-4 py-2 rounded-lg bg-blue-600 font-semibold text-white hover:bg-blue-500"
+              form="project-form"
+              :disabled="saving"
+              class="btn-platinum px-4 py-2 text-xs disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Simpan & Dapatkan API Key
+              <Loader2 v-if="saving" class="h-3.5 w-3.5 animate-spin" />
+              <span>{{ saving ? 'Saving...' : editingProjectId ? 'Save changes' : 'Create project' }}</span>
             </button>
           </div>
-        </form>
-      </div>
-    </div>
+        </div>
+      </template>
+    </BaseModal>
+
+    <CliIngestDrawer
+      :open="cliDrawerOpen"
+      :project-id="cliProjectId"
+      @close="cliDrawerOpen = false"
+    />
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import {
+  ArrowRight,
+  CheckCircle2,
+  FolderGit2,
+  Loader2,
+  Plus,
+  Search,
+  Terminal,
+  X,
+} from 'lucide-vue-next'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import { Plus, ArrowRight, X } from 'lucide-vue-next'
+import BaseModal from '@/components/ui/BaseModal.vue'
+import CliIngestDrawer from '@/components/ui/CliIngestDrawer.vue'
+import EmptyState from '@/components/ui/EmptyState.vue'
+import StatusBadge from '@/components/ui/StatusBadge.vue'
+import { api, type Project, type WorkspaceMember } from '@/services/api'
+import { session } from '@/stores/session'
+import { toast } from '@/stores/toast'
 
-const showCreateModal = ref(false)
+const router = useRouter()
 
-const projects = ref([
-  {
-    id: 'PRJ-01',
-    name: 'Audit Core Banking Web 2026',
-    client: 'PT Bank Bukopin Tbk',
-    roeStart: '2026-10-01',
-    roeEnd: '2026-11-30',
-    scope: ['*.bukopin.co.id', '103.20.15.0/24', 'api.bukopin.co.id'],
-    apiKey: 'vf_live_8f3a129d8b7462a8c19e482b7194fbc2',
-  },
-  {
-    id: 'PRJ-02',
-    name: 'Mobile Gateway API Assessment',
-    client: 'Fintech Nusantara Ltd',
-    roeStart: '2026-10-15',
-    roeEnd: '2026-11-15',
-    scope: ['api.fintech-nusantara.com', '192.168.10.0/24'],
-    apiKey: 'vf_live_2e718b9c440a12f93e8174cb81204d19',
-  },
-])
+const statusFilter = ref<'ALL' | 'ACTIVE' | 'ARCHIVED'>('ALL')
+const searchQuery = ref('')
+const members = ref<WorkspaceMember[]>([])
+const showModal = ref(false)
+const saving = ref(false)
+const editingProjectId = ref<string | null>(null)
+const recentlyCreatedProject = ref<Project | null>(null)
+const cliDrawerOpen = ref(false)
+const cliProjectId = ref<string | null>(null)
+const expandedScopes = reactive<Record<string, boolean>>({})
 
-const newProject = ref({
-  name: '',
-  client: '',
-  roeStart: '2026-11-01',
-  roeEnd: '2026-12-01',
-  scopeRaw: '*.client.com\n10.0.0.0/16',
+const isManager = computed(() => session.activeRole.value === 'MANAGER')
+const canManageProjects = computed(() => session.activeRole.value !== 'VIEWER')
+const eligibleLeads = computed(() => members.value.filter((m) => m.role !== 'VIEWER'))
+
+const filteredProjects = computed(() => {
+  const q = searchQuery.value.toLowerCase()
+  return session.state.projects.filter((p) => {
+    const matchStatus = statusFilter.value === 'ALL' || p.status === statusFilter.value
+    const matchQuery =
+      !q || p.name.toLowerCase().includes(q) || p.client_name.toLowerCase().includes(q)
+    return matchStatus && matchQuery
+  })
 })
 
-const handleCreateProject = () => {
-  const scopeList = newProject.value.scopeRaw
+const formatRole = (role: string): string => {
+  if (!role) return 'Member'
+  return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase()
+}
+
+const resetFilters = () => {
+  searchQuery.value = ''
+  statusFilter.value = 'ALL'
+}
+
+const visibleScopes = (p: Project): string[] => {
+  if (expandedScopes[p.id] || p.target_scope.length <= 4) {
+    return p.target_scope
+  }
+  return p.target_scope.slice(0, 4)
+}
+
+const toggleScopeExpand = (projectId: string) => {
+  expandedScopes[projectId] = !expandedScopes[projectId]
+}
+
+function toLocalInputValue(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+const form = ref({
+  name: '',
+  client_name: '',
+  timezone: 'Asia/Jakarta',
+  roeStartLocal: '',
+  roeEndLocal: '',
+  scopeRaw: '',
+  status: 'ACTIVE' as 'ACTIVE' | 'ARCHIVED',
+})
+
+watch(
+  () => session.state.activeWorkspaceId,
+  async (wId) => {
+    if (!wId) {
+      members.value = []
+      return
+    }
+    try {
+      members.value = await api.workspaces.listMembers(wId)
+    } catch {
+      members.value = []
+    }
+  },
+  { immediate: true }
+)
+
+function resolveMemberName(userId?: string | null): string {
+  if (!userId) return 'Unassigned'
+  return members.value.find((m) => m.user_id === userId)?.full_name ?? userId
+}
+
+function formatDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString('en-US', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function getRoeState(p: Project): string {
+  if (p.status === 'ARCHIVED') return 'ARCHIVED'
+  const now = Date.now()
+  const start = new Date(p.roe_start_date).getTime()
+  const end = new Date(p.roe_end_date).getTime()
+  if (now < start) return 'UPCOMING'
+  if (now > end) return 'EXPIRED'
+  return 'ACTIVE'
+}
+
+const openCreateModal = () => {
+  const now = new Date()
+  const end = new Date(now.getTime() + 14 * 24 * 3600 * 1000)
+  editingProjectId.value = null
+  form.value = {
+    name: '',
+    client_name: '',
+    timezone: 'Asia/Jakarta',
+    roeStartLocal: toLocalInputValue(now),
+    roeEndLocal: toLocalInputValue(end),
+    scopeRaw: '127.0.0.1\nlocalhost',
+    status: 'ACTIVE',
+  }
+  showModal.value = true
+}
+
+const openEditModal = (p: Project) => {
+  editingProjectId.value = p.id
+  form.value = {
+    name: p.name,
+    client_name: p.client_name,
+    timezone: p.timezone || 'UTC',
+    roeStartLocal: toLocalInputValue(new Date(p.roe_start_date)),
+    roeEndLocal: toLocalInputValue(new Date(p.roe_end_date)),
+    scopeRaw: p.target_scope.join('\n'),
+    status: p.status,
+  }
+  showModal.value = true
+}
+
+const handleSaveProject = async () => {
+  const wId = session.state.activeWorkspaceId
+  if (!wId) return
+
+  const scopeList = form.value.scopeRaw
     .split('\n')
     .map((s) => s.trim())
     .filter(Boolean)
+  if (scopeList.length === 0) {
+    toast.warning('Please enter at least one authorized target.')
+    return
+  }
 
-  projects.value.push({
-    id: `PRJ-0${projects.value.length + 1}`,
-    name: newProject.value.name,
-    client: newProject.value.client,
-    roeStart: newProject.value.roeStart,
-    roeEnd: newProject.value.roeEnd,
-    scope: scopeList,
-    apiKey: `vf_live_${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`,
-  })
+  const startIso = new Date(form.value.roeStartLocal).toISOString()
+  const endIso = new Date(form.value.roeEndLocal).toISOString()
+  if (new Date(endIso) <= new Date(startIso)) {
+    toast.warning('End date must be after start date.')
+    return
+  }
 
-  showCreateModal.value = false
+  saving.value = true
+  try {
+    if (editingProjectId.value) {
+      await api.projects.update(wId, editingProjectId.value, {
+        name: form.value.name,
+        client_name: form.value.client_name,
+        target_scope: scopeList,
+        roe_start_date: startIso,
+        roe_end_date: endIso,
+        timezone: form.value.timezone,
+        status: form.value.status,
+      })
+      toast.success('Project updated.')
+    } else {
+      const created = await api.projects.create(wId, {
+        name: form.value.name,
+        client_name: form.value.client_name,
+        target_scope: scopeList,
+        roe_start_date: startIso,
+        roe_end_date: endIso,
+        timezone: form.value.timezone,
+      })
+      session.selectProject(created.id)
+      recentlyCreatedProject.value = created
+      toast.success('Project created and activated.')
+    }
+    await session.refreshProjects()
+    showModal.value = false
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Unable to save project.')
+  } finally {
+    saving.value = false
+  }
 }
 
-const handleCopyApiKey = (key: string) => {
-  navigator.clipboard.writeText(key)
-  alert('API Key berhasil disalin ke clipboard! Gunakan: vulnflow configure --token ' + key)
+const handleAssignLead = async (project: Project, event: Event) => {
+  const wId = session.state.activeWorkspaceId
+  if (!wId) return
+  const selectEl = event.target as HTMLSelectElement
+  const leadId = selectEl.value
+  if (!leadId) return
+  try {
+    await api.projects.assignLead(wId, project.id, leadId)
+    await session.refreshProjects()
+    toast.success('Project lead updated.')
+  } catch (err: unknown) {
+    selectEl.value = project.lead_pentester_id || ''
+    toast.error(err instanceof Error ? err.message : 'Unable to update project lead.')
+  }
+}
+
+const activateProject = (project: Project) => {
+  session.selectProject(project.id)
+  toast.info(`Active project switched to ${project.name}.`)
+}
+
+const openInTriage = async (project: Project) => {
+  session.selectProject(project.id)
+  await router.push('/app/triage')
+}
+
+const openCliForProject = (project: Project) => {
+  session.selectProject(project.id)
+  cliProjectId.value = project.id
+  cliDrawerOpen.value = true
+}
+
+const copyProjectId = async (projectId: string) => {
+  try {
+    await navigator.clipboard.writeText(projectId)
+    toast.success(`Project ID copied: ${projectId}`)
+  } catch {
+    toast.info(projectId, 'Project ID')
+  }
 }
 </script>

@@ -1,24 +1,145 @@
 /**
- * VulnFlow AI API Client
- * Interfaces with FastAPI backend and manages stateless JWT auth tokens.
+ * VulnFlow AI API Client — strictly aligned with packages/contracts Pydantic v2 schemas.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1'
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '')
 
-export interface User {
+export type WorkspaceRole = 'MANAGER' | 'PENTESTER' | 'VIEWER'
+export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO'
+export type FindingStatus =
+  | 'OPEN'
+  | 'IN_REVIEW'
+  | 'REMEDIATED'
+  | 'REOPENED'
+  | 'FALSE_POSITIVE'
+  | 'ACCEPTED_RISK'
+export type Protocol = 'tcp' | 'udp' | 'http' | 'https' | 'icmp' | 'sctp' | 'other'
+export type ImageContentType = 'image/png' | 'image/jpeg' | 'image/svg+xml'
+
+export interface ErrorDetail {
+  field?: string
+  message?: string
+}
+
+export class ApiError extends Error {
+  status: number
+  code: string
+  details: ErrorDetail[]
+  requestId?: string
+
+  constructor(
+    message: string,
+    opts: { status: number; code: string; details?: ErrorDetail[]; requestId?: string }
+  ) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = opts.status
+    this.code = opts.code
+    this.details = opts.details ?? []
+    this.requestId = opts.requestId
+  }
+}
+
+export interface UserDTO {
   id: string
   email: string
   full_name: string
-  status: string
+  is_superadmin: boolean
+  mfa_enabled: boolean
+}
+
+export interface WorkspaceMembership {
+  id: string
+  name: string
+  role: WorkspaceRole
+}
+
+export interface RegisterResponse {
+  user_id: string
+  email: string
+  full_name: string
+  workspace_id: string
+  access_token: string
+  token_type: string
+  expires_in: number
+}
+
+export interface TokenResponse {
+  access_token: string
+  token_type: string
+  expires_in: number
+  user: UserDTO
+  workspaces: WorkspaceMembership[]
+}
+
+export interface MeResponse {
+  user: UserDTO
+  workspaces: WorkspaceMembership[]
+}
+
+export interface MFASetupResponse {
+  secret: string
+  otpauth_uri: string
+  enabled: boolean
 }
 
 export interface Workspace {
   id: string
   name: string
   custom_logo_url?: string | null
-  primary_color_hex?: string | null
-  accent_color_hex?: string | null
+  brand_primary_color: string
+  brand_secondary_color: string
   confidentiality_text?: string | null
+  created_at: string
+}
+
+export interface WorkspaceMember {
+  user_id: string
+  email: string
+  full_name: string
+  role: WorkspaceRole
+}
+
+export interface InviteMemberResponse {
+  invitation_token: string
+  expires_in: number
+}
+
+export interface APIKeyCreateResponse {
+  id: string
+  label: string
+  api_key: string
+}
+
+export interface APIKeySummary {
+  id: string
+  label: string
+  is_active: boolean
+  last_used_at?: string | null
+  created_by_user_id: string
+}
+
+export interface LogoUploadResponse {
+  custom_logo_url: string
+  storage_path: string
+}
+
+export interface AuditLogEntry {
+  id: string
+  created_at: string
+  workspace_id: string
+  actor_user_id?: string | null
+  action: string
+  target_entity: string
+  ip_address: string
+  details: Record<string, unknown>
+}
+
+export interface PaginatedAuditLogs {
+  items: AuditLogEntry[]
+  total: number
+  limit: number
+  offset: number
 }
 
 export interface Project {
@@ -29,74 +150,370 @@ export interface Project {
   target_scope: string[]
   roe_start_date: string
   roe_end_date: string
+  timezone: string
+  status: 'ACTIVE' | 'ARCHIVED'
+  lead_pentester_id?: string | null
+}
+
+export interface ProjectCreatePayload {
+  name: string
+  client_name: string
+  target_scope: string[]
+  roe_start_date: string
+  roe_end_date: string
+  timezone?: string
+}
+
+export interface ProjectUpdatePayload {
+  name?: string
+  client_name?: string
+  target_scope?: string[]
+  roe_start_date?: string
+  roe_end_date?: string
+  timezone?: string
+  status?: 'ACTIVE' | 'ARCHIVED'
 }
 
 export interface Finding {
   id: string
   project_id: string
   title: string
-  cwe_id: string
-  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO'
+  severity: Severity
   cvss_score: number
+  cvss_version: string
   cvss_vector: string
-  status: 'OPEN' | 'IN_REVIEW' | 'REMEDIATED' | 'REOPENED' | 'FALSE_POSITIVE' | 'ACCEPTED_RISK'
-  is_quarantined: boolean
-  is_curated_for_report: boolean
+  cwe_id: string
   target_host: string
   target_port?: number | null
-  endpoint_path?: string | null
+  endpoint_path: string
+  protocol: string
+  source_tool: string
+  status: FindingStatus
+  is_curated_for_report: boolean
+  is_quarantined: boolean
   version: number
   created_at: string
 }
 
-export const authStorage = {
-  getToken: () => localStorage.getItem('vulnflow_token'),
-  setToken: (token: string) => localStorage.setItem('vulnflow_token', token),
-  removeToken: () => localStorage.removeItem('vulnflow_token'),
-  getUser: (): User | null => {
-    const raw = localStorage.getItem('vulnflow_user')
-    return raw ? JSON.parse(raw) : null
-  },
-  setUser: (user: User) => localStorage.setItem('vulnflow_user', JSON.stringify(user)),
-  removeUser: () => localStorage.removeItem('vulnflow_user'),
-  clear: () => {
-    localStorage.removeItem('vulnflow_token')
-    localStorage.removeItem('vulnflow_user')
-    localStorage.removeItem('vulnflow_active_workspace')
-  },
-  getActiveWorkspace: (): Workspace | null => {
-    const raw = localStorage.getItem('vulnflow_active_workspace')
-    return raw ? JSON.parse(raw) : null
-  },
-  setActiveWorkspace: (w: Workspace) =>
-    localStorage.setItem('vulnflow_active_workspace', JSON.stringify(w)),
+export interface FindingSummaryMetrics {
+  total: number
+  curated: number
+  quarantined: number
+  by_severity: Record<string, number>
+  by_status: Record<string, number>
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+export interface FindingListResponse {
+  items: Finding[]
+  total: number
+  limit: number
+  offset: number
+  summary: FindingSummaryMetrics
+}
+
+export interface ManualFindingPayload {
+  title: string
+  severity: Severity
+  cvss_vector: string
+  cwe_id: string
+  target_host: string
+  target_port?: number | null
+  endpoint_path?: string
+  protocol: Protocol
+  proof_of_concept: {
+    raw_evidence: string
+    reproduction_steps?: string[]
+    attachment_urls?: string[]
+  }
+}
+
+export interface ManualFindingResponse {
+  id: string
+  project_id: string
+  title: string
+  severity: Severity
+  cvss_score: number
+  cvss_vector: string
+  cwe_id: string
+  source_tool: 'manual'
+  status: FindingStatus
+  is_quarantined: boolean
+  created_at: string
+}
+
+export interface FindingStatusResponse {
+  id: string
+  status: FindingStatus
+  version: number
+  is_curated_for_report: boolean
+}
+
+export interface FindingPoC {
+  finding_id: string
+  raw_evidence: string
+  reproduction_steps: string[]
+  attachment_file_urls: string[]
+  key_version: number
+}
+
+export interface PoCAttachmentResponse {
+  attachment_url: string
+  storage_path: string
+}
+
+export interface RemediationItem {
+  cwe_id: string
+  vuln_title: string
+  remediation_guidance: string
+}
+
+export interface NarrativeContent {
+  executive_summary: string
+  business_impact: string
+  remediations: RemediationItem[]
+}
+
+export interface AINarrativeResponse {
+  id?: string | null
+  approval_status: 'DRAFT' | 'APPROVED'
+  narratives: NarrativeContent
+  tokens_consumed: number
+  generated_at: string
+  is_fallback: boolean
+}
+
+export interface ThemeOptionsPayload {
+  primary_color: string
+  secondary_color: string
+  show_cover_page?: boolean
+  show_cvss_radar?: boolean
+  confidentiality_notice?: string
+}
+
+export interface ReportSummary {
+  id: string
+  project_id: string
+  report_title: string
+  version: string
+  watermark_applied: boolean
+  generated_at: string
+  download_url: string
+}
+
+export interface CompilePDFAcceptedResponse {
+  job_id: string
+  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  message: string
+  status_url: string
+}
+
+export interface ReportJobStatusResponse {
+  job_id: string
+  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  progress_percentage?: number | null
+  report_id?: string | null
+  download_url?: string | null
+  expires_in_seconds?: number | null
+  error_message?: string | null
+}
+
+export interface ReportDownloadResponse {
+  download_url: string
+  expires_in_seconds: number
+}
+
+export interface SubscriptionStatus {
+  workspace_id: string
+  tier: 'FREE' | 'PRO' | 'ENTERPRISE' | string
+  status: string
+  monthly_report_quota: number
+  reports_used_this_month: number
+  remaining_reports: number
+  quota_reset_date: string
+  payment_status: string
+  payment_type?: string | null
+  midtrans_order_id?: string | null
+}
+
+export interface MidtransCheckoutResponse {
+  order_id: string
+  gross_amount: number
+  snap_token: string
+  redirect_url: string
+}
+
+export interface WorkspaceTokenUsage {
+  workspace_id: string
+  workspace_name: string
+  total_tokens: number
+  narrative_count: number
+  fallback_count: number
+  estimated_cost_usd: number
+  estimated_cost_idr: number
+}
+
+export interface AITelemetryResponse {
+  total_tokens: number
+  total_narratives: number
+  fallback_count: number
+  fallback_ratio: number
+  estimated_cost_usd: number
+  estimated_cost_idr: number
+  monthly_spend_ceiling_usd: number
+  circuit_breaker_active: boolean
+  by_workspace: WorkspaceTokenUsage[]
+}
+
+export interface AdminUserSummary {
+  id: string
+  email: string
+  full_name: string
+  status: string
+  is_superadmin: boolean
+  mfa_enabled: boolean
+  created_at: string
+  workspace_count: number
+}
+
+const STORAGE_KEYS = {
+  token: 'vulnflow_token',
+  user: 'vulnflow_user',
+  workspaceId: 'vulnflow_active_workspace_id',
+  workspace: 'vulnflow_active_workspace',
+  projectId: 'vulnflow_active_project_id',
+} as const
+
+function safeParseJson<T>(raw: string | null): T | null {
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return null
+  }
+}
+
+export const authStorage = {
+  getToken: (): string | null => localStorage.getItem(STORAGE_KEYS.token),
+  setToken: (token: string): void => localStorage.setItem(STORAGE_KEYS.token, token),
+  removeToken: (): void => localStorage.removeItem(STORAGE_KEYS.token),
+
+  getUser: (): UserDTO | null => safeParseJson<UserDTO>(localStorage.getItem(STORAGE_KEYS.user)),
+  setUser: (user: UserDTO): void => localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user)),
+  removeUser: (): void => localStorage.removeItem(STORAGE_KEYS.user),
+
+  getActiveWorkspaceId: (): string | null => {
+    const direct = localStorage.getItem(STORAGE_KEYS.workspaceId)
+    if (direct) return direct
+    const legacy = safeParseJson<{ id?: string }>(localStorage.getItem(STORAGE_KEYS.workspace))
+    return legacy?.id ?? null
+  },
+  setActiveWorkspaceId: (workspaceId: string | null): void => {
+    if (workspaceId) {
+      localStorage.setItem(STORAGE_KEYS.workspaceId, workspaceId)
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.workspaceId)
+      localStorage.removeItem(STORAGE_KEYS.workspace)
+    }
+  },
+
+  getActiveWorkspace: (): Workspace | null =>
+    safeParseJson<Workspace>(localStorage.getItem(STORAGE_KEYS.workspace)),
+  setActiveWorkspace: (workspace: Workspace): void => {
+    localStorage.setItem(STORAGE_KEYS.workspace, JSON.stringify(workspace))
+    localStorage.setItem(STORAGE_KEYS.workspaceId, workspace.id)
+  },
+
+  getActiveProjectId: (): string | null => localStorage.getItem(STORAGE_KEYS.projectId),
+  setActiveProjectId: (projectId: string | null): void => {
+    if (projectId) {
+      localStorage.setItem(STORAGE_KEYS.projectId, projectId)
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.projectId)
+    }
+  },
+
+  clear: (): void => {
+    localStorage.removeItem(STORAGE_KEYS.token)
+    localStorage.removeItem(STORAGE_KEYS.user)
+    localStorage.removeItem(STORAGE_KEYS.workspaceId)
+    localStorage.removeItem(STORAGE_KEYS.workspace)
+    localStorage.removeItem(STORAGE_KEYS.projectId)
+  },
+}
+
+const PUBLIC_AUTH_PATHS = new Set([
+  '/auth/login',
+  '/auth/register',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+])
+
+function buildQuery(params: Record<string, string | number | boolean | undefined | null>): string {
+  const sp = new URLSearchParams()
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null && val !== '') {
+      sp.set(key, String(val))
+    }
+  }
+  const qs = sp.toString()
+  return qs ? `?${qs}` : ''
+}
+
+async function request<T>(
+  endpoint: string,
+  options: RequestInit = {},
+  config: { skipAuthRedirect?: boolean } = {}
+): Promise<T> {
   const token = authStorage.getToken()
   const headers = new Headers(options.headers || {})
-  headers.set('Content-Type', 'application/json')
+  if (!headers.has('Content-Type') && options.body !== undefined) {
+    headers.set('Content-Type', 'application/json')
+  }
   if (token) {
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  })
-
-  if (response.status === 401) {
-    authStorage.clear()
-    if (!window.location.pathname.startsWith('/app/login')) {
-      window.location.href = '/app/login'
-    }
-    throw new Error('Sesi telah berakhir. Silakan login kembali.')
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    })
+  } catch {
+    throw new ApiError('Unable to reach the VulnFlow API server.', {
+      status: 0,
+      code: 'NETWORK_ERROR',
+    })
   }
 
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new Error(data.message || `HTTP ${response.status}: Permintaan gagal diproses.`)
+    const code = typeof data.code === 'string' ? data.code : `HTTP_${response.status}`
+    const message =
+      (typeof data.message === 'string' && data.message) ||
+      (typeof data.detail === 'string' && data.detail) ||
+      `Request failed (HTTP ${response.status}).`
+    const details = Array.isArray(data.details) ? (data.details as ErrorDetail[]) : []
+
+    if (
+      response.status === 401 &&
+      !config.skipAuthRedirect &&
+      !PUBLIC_AUTH_PATHS.has(endpoint) &&
+      code !== 'MFA_REQUIRED'
+    ) {
+      authStorage.clear()
+      if (window.location.pathname.startsWith('/app') && !window.location.pathname.startsWith('/app/login')) {
+        window.location.href = `/app/login?redirect=${encodeURIComponent(window.location.pathname)}`
+      }
+    }
+
+    throw new ApiError(message, {
+      status: response.status,
+      code,
+      details,
+      requestId: typeof data.request_id === 'string' ? data.request_id : undefined,
+    })
   }
 
   return data as T
@@ -104,86 +521,346 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
 export const api = {
   auth: {
-    login: (credentials: { email: string; password: string }) =>
-      request<{ access_token: string; token_type: string; user: User }>('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify(credentials),
-      }),
+    login: (credentials: { email: string; password: string; totp_code?: string | null }) =>
+      request<TokenResponse>(
+        '/auth/login',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            email: credentials.email,
+            password: credentials.password,
+            ...(credentials.totp_code ? { totp_code: credentials.totp_code } : {}),
+          }),
+        },
+        { skipAuthRedirect: true }
+      ),
     register: (payload: {
       email: string
       password: string
       full_name: string
       workspace_name: string
-      invitation_token?: string
+      invitation_token?: string | null
     }) =>
-      request<{ access_token: string; workspace_id: string; user: User }>('/auth/register', {
+      request<RegisterResponse>(
+        '/auth/register',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            email: payload.email,
+            password: payload.password,
+            full_name: payload.full_name,
+            workspace_name: payload.workspace_name,
+            ...(payload.invitation_token ? { invitation_token: payload.invitation_token } : {}),
+          }),
+        },
+        { skipAuthRedirect: true }
+      ),
+    me: () => request<MeResponse>('/auth/me'),
+    logout: () => request<{ status: string }>('/auth/logout', { method: 'POST' }),
+    forgotPassword: (email: string) =>
+      request<{ message: string }>(
+        '/auth/forgot-password',
+        { method: 'POST', body: JSON.stringify({ email }) },
+        { skipAuthRedirect: true }
+      ),
+    resetPassword: (token: string, newPassword: string) =>
+      request<{ status: string }>(
+        '/auth/reset-password',
+        { method: 'POST', body: JSON.stringify({ token, new_password: newPassword }) },
+        { skipAuthRedirect: true }
+      ),
+    setupMfa: () => request<MFASetupResponse>('/auth/mfa/setup', { method: 'POST' }),
+    verifyMfa: (totpCode: string) =>
+      request<{ valid: boolean }>(
+        '/auth/mfa/verify',
+        { method: 'POST', body: JSON.stringify({ totp_code: totpCode }) },
+        { skipAuthRedirect: true }
+      ),
+    deleteMe: (password: string) =>
+      request<{ status: string }>(
+        '/auth/me',
+        { method: 'DELETE', body: JSON.stringify({ password }) },
+        { skipAuthRedirect: true }
+      ),
+  },
+
+  workspaces: {
+    list: () => request<Workspace[]>('/workspaces'),
+    get: (workspaceId: string) => request<Workspace>(`/workspaces/${workspaceId}`),
+    create: (name: string) =>
+      request<Workspace>('/workspaces', {
+        method: 'POST',
+        body: JSON.stringify({ name }),
+      }),
+    update: (
+      workspaceId: string,
+      payload: {
+        name?: string
+        custom_logo_url?: string
+        brand_primary_color?: string
+        brand_secondary_color?: string
+        confidentiality_text?: string
+      }
+    ) =>
+      request<Workspace>(`/workspaces/${workspaceId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    delete: (workspaceId: string, password: string, confirmWorkspaceName: string) =>
+      request<{ status: string }>(
+        `/workspaces/${workspaceId}`,
+        {
+          method: 'DELETE',
+          body: JSON.stringify({
+            password,
+            confirm_workspace_name: confirmWorkspaceName,
+          }),
+        },
+        { skipAuthRedirect: true }
+      ),
+    uploadLogo: (
+      workspaceId: string,
+      payload: { filename: string; content_type: ImageContentType; data_base64: string }
+    ) =>
+      request<LogoUploadResponse>(`/workspaces/${workspaceId}/logo`, {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
-  },
-  workspaces: {
-    list: () => request<Workspace[]>('/workspaces'),
-    get: (id: string) => request<Workspace>(`/workspaces/${id}`),
-    updateTheme: (
-      id: string,
-      theme: { primary_color_hex?: string; accent_color_hex?: string; confidentiality_text?: string }
-    ) =>
-      request<Workspace>(`/workspaces/${id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(theme),
+    listMembers: (workspaceId: string) =>
+      request<WorkspaceMember[]>(`/workspaces/${workspaceId}/members`),
+    inviteMember: (workspaceId: string, email: string, role: WorkspaceRole) =>
+      request<InviteMemberResponse>(`/workspaces/${workspaceId}/members`, {
+        method: 'POST',
+        body: JSON.stringify({ email, role }),
       }),
+    acceptInvitation: (invitationToken: string) =>
+      request<WorkspaceMembership>('/workspaces/invitations/accept', {
+        method: 'POST',
+        body: JSON.stringify({ invitation_token: invitationToken }),
+      }),
+    updateMemberRole: (workspaceId: string, userId: string, role: WorkspaceRole) =>
+      request<WorkspaceMember>(`/workspaces/${workspaceId}/members/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role }),
+      }),
+    removeMember: (workspaceId: string, userId: string) =>
+      request<{ status: string }>(`/workspaces/${workspaceId}/members/${userId}`, {
+        method: 'DELETE',
+      }),
+    listApiKeys: (workspaceId: string) =>
+      request<APIKeySummary[]>(`/workspaces/${workspaceId}/api-keys`),
+    createApiKey: (workspaceId: string, label: string) =>
+      request<APIKeyCreateResponse>(`/workspaces/${workspaceId}/api-keys`, {
+        method: 'POST',
+        body: JSON.stringify({ label }),
+      }),
+    revokeApiKey: (workspaceId: string, keyId: string) =>
+      request<{ status: string }>(`/workspaces/${workspaceId}/api-keys/${keyId}`, {
+        method: 'DELETE',
+      }),
+    listAuditLogs: (
+      workspaceId: string,
+      params: { action?: string; actor_user_id?: string; limit?: number; offset?: number } = {}
+    ) =>
+      request<PaginatedAuditLogs>(
+        `/workspaces/${workspaceId}/audit-logs${buildQuery(params)}`
+      ),
   },
+
   projects: {
     list: (workspaceId: string) => request<Project[]>(`/workspaces/${workspaceId}/projects`),
-    create: (workspaceId: string, payload: Omit<Project, 'id' | 'workspace_id'>) =>
+    get: (workspaceId: string, projectId: string) =>
+      request<Project>(`/workspaces/${workspaceId}/projects/${projectId}`),
+    create: (workspaceId: string, payload: ProjectCreatePayload) =>
       request<Project>(`/workspaces/${workspaceId}/projects`, {
         method: 'POST',
         body: JSON.stringify(payload),
       }),
+    update: (workspaceId: string, projectId: string, payload: ProjectUpdatePayload) =>
+      request<Project>(`/workspaces/${workspaceId}/projects/${projectId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    assignLead: (workspaceId: string, projectId: string, leadPentesterId: string) =>
+      request<Project>(`/workspaces/${workspaceId}/projects/${projectId}/lead`, {
+        method: 'PATCH',
+        body: JSON.stringify({ lead_pentester_id: leadPentesterId }),
+      }),
   },
+
   findings: {
-    list: (workspaceId: string, projectId: string) =>
-      request<Finding[]>(`/workspaces/${workspaceId}/projects/${projectId}/findings`),
+    list: (
+      workspaceId: string,
+      projectId: string,
+      params: {
+        severity?: Severity | ''
+        status?: FindingStatus | ''
+        is_quarantined?: boolean | null
+        search?: string
+        limit?: number
+        offset?: number
+      } = {}
+    ) =>
+      request<FindingListResponse>(
+        `/workspaces/${workspaceId}/projects/${projectId}/findings${buildQuery(params)}`
+      ),
+    createManual: (workspaceId: string, projectId: string, payload: ManualFindingPayload) =>
+      request<ManualFindingResponse>(
+        `/workspaces/${workspaceId}/projects/${projectId}/findings/manual`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      ),
     updateStatus: (
       workspaceId: string,
       projectId: string,
       findingId: string,
-      status: Finding['status'],
+      status: FindingStatus,
       version: number
     ) =>
-      request<Finding>(`/workspaces/${workspaceId}/projects/${projectId}/findings/${findingId}/status`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status, version }),
-      }),
-    decryptPoC: (workspaceId: string, projectId: string, findingId: string) =>
-      request<{ raw_evidence: string; reproduction_steps: string[] }>(
+      request<FindingStatusResponse>(
+        `/workspaces/${workspaceId}/projects/${projectId}/findings/${findingId}/status`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ status, version }),
+        }
+      ),
+    updateCuration: (
+      workspaceId: string,
+      projectId: string,
+      findingId: string,
+      payload: { is_curated_for_report: boolean; unquarantine?: boolean }
+    ) =>
+      request<FindingStatusResponse>(
+        `/workspaces/${workspaceId}/projects/${projectId}/findings/${findingId}/curation`,
+        {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        }
+      ),
+    getPoC: (workspaceId: string, projectId: string, findingId: string) =>
+      request<FindingPoC>(
         `/workspaces/${workspaceId}/projects/${projectId}/findings/${findingId}/poc`
       ),
+    uploadAttachment: (
+      workspaceId: string,
+      projectId: string,
+      findingId: string,
+      payload: { filename: string; content_type: 'image/png' | 'image/jpeg'; data_base64: string }
+    ) =>
+      request<PoCAttachmentResponse>(
+        `/workspaces/${workspaceId}/projects/${projectId}/findings/${findingId}/attachments`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      ),
   },
+
   ai: {
+    listNarratives: (workspaceId: string, projectId: string) =>
+      request<AINarrativeResponse[]>(
+        `/workspaces/${workspaceId}/projects/${projectId}/reports/ai-narratives`
+      ),
     generateNarrative: (
       workspaceId: string,
       projectId: string,
-      payload: { language: string; finding_ids: string[]; sections_requested: string[] }
+      payload: {
+        tone?: string
+        language: 'id' | 'en'
+        sections_requested: string[]
+        finding_ids: string[]
+      }
     ) =>
-      request<{
-        narratives: { executive_summary: string; business_impact: string; remediations: any[] }
-        is_fallback: boolean
-        tokens_consumed: number
-      }>(`/workspaces/${workspaceId}/projects/${projectId}/reports/ai-narratives`, {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
+      request<AINarrativeResponse>(
+        `/workspaces/${workspaceId}/projects/${projectId}/reports/ai-narratives`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      ),
+    updateNarrative: (
+      workspaceId: string,
+      projectId: string,
+      narrativeId: string,
+      payload: {
+        executive_summary: string
+        business_impact: string
+        remediations: RemediationItem[]
+        approval_status: 'DRAFT' | 'APPROVED'
+      }
+    ) =>
+      request<AINarrativeResponse>(
+        `/workspaces/${workspaceId}/projects/${projectId}/reports/ai-narratives/${narrativeId}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify(payload),
+        }
+      ),
   },
+
+  reports: {
+    list: (workspaceId: string, projectId: string) =>
+      request<ReportSummary[]>(`/workspaces/${workspaceId}/projects/${projectId}/reports`),
+    compilePdf: (
+      workspaceId: string,
+      projectId: string,
+      payload: {
+        finding_ids: string[]
+        include_ai_narratives?: boolean
+        theme_options?: ThemeOptionsPayload | null
+      }
+    ) =>
+      request<CompilePDFAcceptedResponse>(
+        `/workspaces/${workspaceId}/projects/${projectId}/reports/compile-pdf`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      ),
+    getJobStatus: (workspaceId: string, jobId: string) =>
+      request<ReportJobStatusResponse>(`/workspaces/${workspaceId}/reports/jobs/${jobId}`),
+    getDownloadUrl: (workspaceId: string, reportId: string) =>
+      request<ReportDownloadResponse>(
+        `/workspaces/${workspaceId}/reports/${reportId}/download?format=json`
+      ),
+  },
+
   billing: {
     getSubscription: (workspaceId: string) =>
-      request<{ tier: string; reports_used_this_month: number; max_reports: number }>(
-        `/workspaces/${workspaceId}/billing/subscription`
-      ),
+      request<SubscriptionStatus>(`/workspaces/${workspaceId}/billing/subscription`),
     checkoutPro: (workspaceId: string) =>
-      request<{ snap_token: string; redirect_url: string; order_id: string }>(
-        `/workspaces/${workspaceId}/billing/checkout`,
-        { method: 'POST', body: JSON.stringify({ tier: 'PRO' }) }
-      ),
+      request<MidtransCheckoutResponse>(`/workspaces/${workspaceId}/billing/checkout`, {
+        method: 'POST',
+        body: JSON.stringify({ tier: 'PRO', billing_cycle: 'MONTHLY' }),
+      }),
+    syncStatus: (workspaceId: string) =>
+      request<SubscriptionStatus>(`/workspaces/${workspaceId}/billing/sync`, {
+        method: 'POST',
+      }),
+  },
+
+  admin: {
+    getAiTelemetry: () => request<AITelemetryResponse>('/admin/telemetry/ai'),
+    updateSpendCeiling: (monthlySpendCeilingUsd: number) =>
+      request<AITelemetryResponse>('/admin/telemetry/ai/ceiling', {
+        method: 'PATCH',
+        body: JSON.stringify({ monthly_spend_ceiling_usd: monthlySpendCeilingUsd }),
+      }),
+    listUsers: (params: { status?: string; limit?: number; offset?: number } = {}) =>
+      request<AdminUserSummary[]>(`/admin/users${buildQuery(params)}`),
+    suspendUser: (userId: string, reason: string) =>
+      request<AdminUserSummary>(`/admin/users/${userId}/suspend`, {
+        method: 'POST',
+        body: JSON.stringify({ reason }),
+      }),
+    activateUser: (userId: string) =>
+      request<AdminUserSummary>(`/admin/users/${userId}/activate`, {
+        method: 'POST',
+      }),
+    listAuditLogs: (
+      params: { workspace_id?: string; action?: string; limit?: number; offset?: number } = {}
+    ) => request<PaginatedAuditLogs>(`/admin/audit-logs${buildQuery(params)}`),
   },
 }
