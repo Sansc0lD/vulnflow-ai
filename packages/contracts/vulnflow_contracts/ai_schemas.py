@@ -1,6 +1,7 @@
 """AI Ghostwriter narrative contracts — SDD §2.6.1.3 (FR-AI / UC-11)."""
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -35,9 +36,20 @@ class AINarrativeResponse(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    id: str | None = None
+    approval_status: Literal["DRAFT", "APPROVED"] = "DRAFT"
     narratives: NarrativeContent
     tokens_consumed: int = Field(ge=0)
     generated_at: datetime
     is_fallback: bool = Field(
         default=False, description="UC-11b / AD-02 — true saat Deterministic Fallback Engine aktif"
     )
+
+
+class UpdateAINarrativeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    executive_summary: str = Field(min_length=1, max_length=20_000)
+    business_impact: str = Field(min_length=1, max_length=20_000)
+    remediations: list[RemediationItem] = Field(default_factory=list)
+    approval_status: Literal["DRAFT", "APPROVED"] = "DRAFT"

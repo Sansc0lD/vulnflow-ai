@@ -207,13 +207,14 @@ def test_register_request_accepts_strong_password() -> None:
     ],
 )
 def test_register_request_rejects_weak_password(weak_password: str) -> None:
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as exc_info:
         RegisterRequest(
             email="auditor@agency.corp",
             password=weak_password,
             full_name="Ahmad Dani",
             workspace_name="Agency Security Corp",
         )
+    assert "Password" in str(exc_info.value)
 
 
 def test_token_response_round_trip() -> None:
@@ -492,3 +493,12 @@ def test_midtrans_webhook_payload_rejects_malformed_signature() -> None:
             payment_type="qris",
             transaction_time="2026-09-27 23:45:00",
         )
+
+
+def test_normalized_email_accepts_local_demo_domain_and_rejects_malformed() -> None:
+    req = LoginRequest(email="  Admin@VulnFlow.LOCAL  ", password="Str0ng!Passw0rd")
+    assert req.email == "admin@vulnflow.local"
+
+    for bad_email in ("not-an-email", "admin@.local", "admin@..local", "user@invalid"):
+        with pytest.raises(ValidationError):
+            LoginRequest(email=bad_email, password="Str0ng!Passw0rd")

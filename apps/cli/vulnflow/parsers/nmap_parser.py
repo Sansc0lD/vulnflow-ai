@@ -55,7 +55,11 @@ def parse_nmap_hosts(file_path: Path) -> Generator[NmapPortRecord, None, None]:
                 continue
 
             service_el = port_el.find("service")
-            script_el = port_el.find("script")
+            scripts = port_el.findall("script")
+            script_parts = [
+                f"{s.get('id', 'script')}: {s.get('output')}" for s in scripts if s.get("output")
+            ]
+            script_output = "\n".join(script_parts) if script_parts else None
 
             yield NmapPortRecord(
                 host=host_addr,
@@ -64,7 +68,7 @@ def parse_nmap_hosts(file_path: Path) -> Generator[NmapPortRecord, None, None]:
                 service=service_el.get("name", "") if service_el is not None else "",
                 product=service_el.get("product", "") if service_el is not None else "",
                 version=service_el.get("version", "") if service_el is not None else "",
-                script_output=script_el.get("output") if script_el is not None else None,
+                script_output=script_output,
             )
 
 
@@ -84,7 +88,12 @@ def normalize_nmap_finding(raw: dict[str, Any]) -> UnifiedVulnerabilityFinding:
         title = f"Open port {port}/{service}"
         reproduction_steps = [f"nmap detected an open port at {raw['host']}:{port} ({service})"]
 
-    protocol = Protocol.TCP if raw.get("protocol") == "tcp" else Protocol.UDP
+    raw_proto = str(raw.get("protocol") or "tcp").lower()
+    protocol = {
+        "tcp": Protocol.TCP,
+        "udp": Protocol.UDP,
+        "sctp": Protocol.SCTP,
+    }.get(raw_proto, Protocol.OTHER)
 
     return UnifiedVulnerabilityFinding(
         title=title,

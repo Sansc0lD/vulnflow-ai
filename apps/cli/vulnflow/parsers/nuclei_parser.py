@@ -59,11 +59,35 @@ def normalize_nuclei_finding(raw: dict[str, Any]) -> UnifiedVulnerabilityFinding
     # where every classified finding was silently dropped without this.
     cwe_id = cwe_ids[0].upper() if cwe_ids else "UNKNOWN"
 
-    matched_at = raw.get("matched-at") or raw.get("host") or ""
-    parsed_url = urllib.parse.urlsplit(matched_at)
-    target_host = parsed_url.hostname or str(raw.get("host", ""))
-    protocol = Protocol.HTTP if parsed_url.scheme == "http" else Protocol.HTTPS
-    if parsed_url.scheme not in {"http", "https"}:
+    matched_at = str(raw.get("matched-at") or raw.get("host") or "")
+    has_scheme = "://" in matched_at
+    parsed_url = urllib.parse.urlsplit(matched_at if has_scheme else f"tcp://{matched_at}")
+
+    fallback_host_raw = str(raw.get("host", ""))
+    if "://" in fallback_host_raw:
+        fallback_parsed = urllib.parse.urlsplit(fallback_host_raw)
+        fallback_host = fallback_parsed.hostname or fallback_host_raw
+    else:
+        fallback_host = fallback_host_raw.split(":", 1)[0]
+
+    target_host = parsed_url.hostname or fallback_host
+    try:
+        target_port: int | None = parsed_url.port
+    except ValueError:
+        target_port = None
+    if target_port is None and raw.get("port") is not None:
+        try:
+            target_port = int(raw["port"])
+        except (TypeError, ValueError):
+            target_port = None
+
+    if parsed_url.scheme == "http" and has_scheme:
+        protocol = Protocol.HTTP
+    elif parsed_url.scheme == "https" and has_scheme:
+        protocol = Protocol.HTTPS
+    elif not has_scheme and target_port is not None:
+        protocol = Protocol.TCP
+    else:
         protocol = Protocol.OTHER
 
     template_id = raw.get("template-id", "unknown-template")
@@ -76,8 +100,8 @@ def normalize_nuclei_finding(raw: dict[str, Any]) -> UnifiedVulnerabilityFinding
         cvss_vector=classification.get("cvss-metrics"),
         cwe_id=cwe_id,
         target_host=target_host,
-        target_port=parsed_url.port,
-        endpoint_path=parsed_url.path or "",
+        target_port=target_port,
+        endpoint_path=parsed_url.path or "" if has_scheme else "",
         protocol=protocol,
         source_tool=SourceTool.NUCLEI,
         proof_of_concept=ProofOfConceptSchema(

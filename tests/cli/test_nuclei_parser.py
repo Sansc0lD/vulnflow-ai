@@ -108,3 +108,17 @@ def test_normalize_nuclei_finding_defaults_when_classification_missing() -> None
     assert finding.cvss_score is None
     assert finding.cvss_vector is None
     assert finding.target_port is None
+
+
+def test_normalize_nuclei_handles_schemeless_matched_at_with_port() -> None:
+    raw = {
+        "template-id": "openssh-detect",
+        "info": {"name": "OpenSSH Banner", "severity": "info"},
+        "host": "10.0.0.9:22",
+        "matched-at": "10.0.0.9:22",
+    }
+    finding = normalize_nuclei_finding(raw)
+    assert finding.target_host == "10.0.0.9"
+    assert finding.target_port == 22
+    assert finding.protocol.value == "tcp"
+    assert finding.endpoint_path == ""

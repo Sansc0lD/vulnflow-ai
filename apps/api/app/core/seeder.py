@@ -12,6 +12,7 @@ from app.models.workspace import Workspace
 from app.models.workspace_member import WorkspaceMember
 
 ADMIN_EMAIL = "admin@vulnflow.local"
+DEFAULT_SEED_TOTP_SECRET = "JBSWY3DPEHPK3PXP"  # nosec: B105 — documented academic demo seed default
 FREE_WORKSPACE_NAME = "VulnFlow Internal (Free Tier Template)"
 PRO_WORKSPACE_NAME = "VulnFlow Internal (Pro Tier Template)"
 
@@ -23,14 +24,25 @@ def get_seed_admin_password() -> str:
     return password
 
 
+def get_seed_admin_totp_secret() -> str:
+    return os.environ.get("SEED_ADMIN_TOTP_SECRET") or DEFAULT_SEED_TOTP_SECRET
+
+
 def _get_or_create_admin(session: Session) -> User:
     admin = session.query(User).filter_by(email=ADMIN_EMAIL).one_or_none()
+    totp_secret = get_seed_admin_totp_secret()
     if admin is not None:
+        if not admin.is_superadmin:
+            admin.is_superadmin = True
+        if not admin.totp_secret:
+            admin.totp_secret = totp_secret
         return admin
     admin = User(
         email=ADMIN_EMAIL,
         password_hash=PasswordHasher().hash(get_seed_admin_password()),
         full_name="VulnFlow Admin",
+        is_superadmin=True,
+        totp_secret=totp_secret,
     )
     session.add(admin)
     session.flush()

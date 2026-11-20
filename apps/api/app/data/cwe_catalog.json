@@ -34,6 +34,46 @@
     "business_impact": "An attacker can craft malicious serialized payloads to achieve remote code execution or denial of service when deserialized by the application.",
     "remediation": "Avoid deserializing untrusted data with formats that support arbitrary object instantiation (e.g. pickle). Prefer safe data formats (JSON) with strict schema validation."
   },
+  "CWE-306": {
+    "title": "Missing Authentication for Critical Function",
+    "business_impact": "Exposed administrative interfaces, datastores, or critical operations can be invoked by unauthenticated actors, risking total service compromise or data exfiltration.",
+    "remediation": "Require strong authentication on every exposed network service and administrative endpoint, and bind internal datastores (such as Redis/PostgreSQL) to private subnets only."
+  },
+  "CWE-319": {
+    "title": "Cleartext Transmission of Sensitive Information",
+    "business_impact": "Credentials, session cookies, or sensitive business payloads transmitted over unencrypted channels can be intercepted or modified by network eavesdroppers.",
+    "remediation": "Enforce TLS 1.2/1.3 for all external and internal traffic, redirect HTTP to HTTPS with HSTS enabled, and mark session cookies with the Secure flag."
+  },
+  "CWE-326": {
+    "title": "Inadequate Encryption Strength",
+    "business_impact": "Deprecated TLS protocols or weak cryptographic ciphers allow attackers to downgrade connections or recover protected session traffic.",
+    "remediation": "Disable SSLv3, TLS 1.0, TLS 1.1, RC4, and 3DES ciphers on reverse proxies and load balancers; enforce TLS 1.2+ with AEAD cipher suites."
+  },
+  "CWE-352": {
+    "title": "Cross-Site Request Forgery (CSRF)",
+    "business_impact": "Authenticated users can be tricked into executing unintended state-changing actions (such as password changes or fund transfers) via malicious third-party sites.",
+    "remediation": "Protect state-changing cookie-authenticated endpoints with anti-CSRF synchronizer tokens, validate Origin/Referer headers, and configure SameSite=Lax or Strict cookies."
+  },
+  "CWE-639": {
+    "title": "Authorization Bypass Through User-Controlled Key (IDOR/BOLA)",
+    "business_impact": "Authenticated attackers can manipulate object identifiers to read or alter records belonging to other tenants or users, causing severe privacy and compliance breaches.",
+    "remediation": "Verify tenant and object ownership server-side on every request using the authenticated user's session context rather than trusting client-supplied IDs."
+  },
+  "CWE-693": {
+    "title": "Protection Mechanism Failure",
+    "business_impact": "Missing or misconfigured security headers (CSP, HSTS, X-Frame-Options) weaken browser-side defenses against clickjacking, MIME sniffing, and XSS.",
+    "remediation": "Configure strict Content-Security-Policy, Strict-Transport-Security, X-Content-Type-Options: nosniff, and X-Frame-Options: DENY across all HTTP responses."
+  },
+  "CWE-798": {
+    "title": "Use of Hard-coded Credentials",
+    "business_impact": "Embedded API keys, database passwords, or signing secrets allow attackers with source or artifact access to compromise backend infrastructure directly.",
+    "remediation": "Remove all hard-coded secrets from source code and configuration files, rotate exposed credentials immediately, and inject secrets at runtime via environment/vault managers."
+  },
+  "CWE-918": {
+    "title": "Server-Side Request Forgery (SSRF)",
+    "business_impact": "An attacker can coerce the server into probing internal services, localhost ports, or cloud metadata endpoints (e.g. 169.254.169.254) to steal IAM credentials.",
+    "remediation": "Resolve target DNS once, reject loopback/private/link-local/CGNAT IPs, restrict URI schemes to https, disable redirects, and connect directly to the validated IP."
+  },
   "UNKNOWN": {
     "title": "Unclassified Vulnerability",
     "business_impact": "This finding could not be matched to a known CWE category. Its business impact should be assessed manually based on the specific vulnerability details before this report is finalized.",

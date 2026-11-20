@@ -207,3 +207,36 @@ def test_push_batch_raises_client_error_on_401_without_retrying() -> None:
         )
 
     assert attempts["count"] == 1
+
+
+def test_push_batch_retries_on_409_pending_idempotency() -> None:
+    attempts = {"count": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            return httpx.Response(409, json={"message": "In progress"})
+        return httpx.Response(
+            201,
+            json={
+                "new_findings_count": 1,
+                "duplicate_findings_count": 0,
+                "quarantined_count": 0,
+                "reopened_findings_count": 0,
+            },
+        )
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    res = push_batch(
+        client,
+        api_url="https://api.vulnflow.ai",
+        workspace_id="wsp-01",
+        project_id="prj-01",
+        api_key="vf_live_test",
+        findings=[_finding()],
+        scan_metadata=_SCAN_METADATA,
+        idempotency_key="hash:0",
+        retry_delay_seconds=0.0,
+    )
+    assert attempts["count"] == 2
+    assert res.new_findings_count == 1

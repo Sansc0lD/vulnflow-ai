@@ -104,3 +104,32 @@ def test_normalize_nmap_finding_with_script_output_is_medium_severity() -> None:
 
     assert finding.severity.value == "MEDIUM"
     assert "CVE-2021-23017" in finding.proof_of_concept.raw_evidence
+
+
+def test_parse_nmap_collects_multiple_scripts_and_sctp(tmp_path: Path) -> None:
+    xml_data = """<?xml version="1.0"?>
+<nmaprun>
+  <host>
+    <address addr="10.0.0.8" addrtype="ipv4"/>
+    <ports>
+      <port protocol="sctp" portid="3868">
+        <state state="open"/>
+        <service name="diameter"/>
+        <script id="s1" output="out one"/>
+        <script id="s2" output="out two"/>
+      </port>
+    </ports>
+  </host>
+</nmaprun>
+"""
+    xml_file = tmp_path / "multi.xml"
+    xml_file.write_text(xml_data, encoding="utf-8")
+    records = list(parse_nmap_hosts(xml_file))
+    assert len(records) == 1
+    assert records[0]["script_output"] is not None
+    assert "s1: out one" in records[0]["script_output"]
+    assert "s2: out two" in records[0]["script_output"]
+
+    finding = normalize_nmap_finding(dict(records[0]))
+    assert finding.protocol.value == "sctp"
+    assert finding.severity.value == "MEDIUM"

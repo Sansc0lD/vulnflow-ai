@@ -37,8 +37,8 @@ def _build_fallback_narrative(findings: list[Any]) -> NarrativeContent:
     ]
     return NarrativeContent(
         executive_summary=(
-            "Narasi AI tidak tersedia saat ini; laporan ini menggunakan ringkasan "
-            "deterministik berbasis katalog CWE internal (EC-14)."
+            "AI narrative generation is currently unavailable; this report uses a deterministic "
+            "summary derived from the internal CWE catalog (EC-14)."
         ),
         business_impact=get_fallback_narrative(findings[0].cwe_id)["business_impact"],
         remediations=remediations,

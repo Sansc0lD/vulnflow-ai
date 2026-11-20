@@ -47,6 +47,18 @@ def _build_prompt(abstract_findings: list[dict[str, Any]], tone: str, language: 
     )
 
 
+def _strip_json_fences(raw_text: str) -> str:
+    stripped = raw_text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+    return stripped
+
+
 class GeminiLLMAdapter:
     def __init__(self, *, api_key: str, model: str, client: httpx.Client) -> None:
         self._api_key = api_key
@@ -56,6 +68,9 @@ class GeminiLLMAdapter:
     def generate_narrative(
         self, *, abstract_findings: list[dict[str, Any]], tone: str, language: str
     ) -> tuple[NarrativeContent, int]:
+        if not self._api_key or not self._api_key.strip():
+            raise LLMTransientError("Gemini API key is not configured.")
+
         prompt = _build_prompt(abstract_findings, tone, language)
         url = f"{_API_BASE_URL}/{self._model}:generateContent"
 
@@ -64,21 +79,23 @@ class GeminiLLMAdapter:
             response = self._client.post(
                 url,
                 headers={"x-goog-api-key": self._api_key},
-                json={"contents": [{"parts": [{"text": prompt}]}]},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"responseMimeType": "application/json"},
+                },
             )
         except httpx.TimeoutException as exc:
             raise LLMTransientError("Gemini request timed out.") from exc
         except httpx.TransportError as exc:
             raise LLMTransientError("Gemini request failed at the transport layer.") from exc
 
-        if response.status_code in _TRANSIENT_STATUS_CODES:
-            raise LLMTransientError(f"Gemini returned transient status {response.status_code}.")
-        response.raise_for_status()
+        if response.status_code in _TRANSIENT_STATUS_CODES or response.status_code >= 400:
+            raise LLMTransientError(f"Gemini returned status {response.status_code}.")
 
         try:
             data = response.json()
             text = data["candidates"][0]["content"]["parts"][0]["text"]
-            narrative = NarrativeContent.model_validate_json(text)
+            narrative = NarrativeContent.model_validate_json(_strip_json_fences(text))
             tokens_consumed = int(data.get("usageMetadata", {}).get("totalTokenCount", 0))
         except (KeyError, IndexError, ValueError, ValidationError) as exc:
             raise LLMTransientError("Gemini response could not be parsed.") from exc

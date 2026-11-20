@@ -2,6 +2,7 @@
 
 import os
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -10,6 +11,7 @@ from app.main import app
 from app.models.ai_narrative import AINarrative
 from app.routers.ai import get_llm_adapter
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
 
 from vulnflow_contracts import NarrativeContent, RemediationItem
 
@@ -24,8 +26,8 @@ _PROJECT = {
     "name": "Audit",
     "client_name": "Klien",
     "target_scope": ["*.klien.com"],
-    "roe_start_date": "2026-10-01T00:00:00Z",
-    "roe_end_date": "2026-11-01T00:00:00Z",
+    "roe_start_date": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+    "roe_end_date": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
 }
 
 _MANUAL_FINDING = {
@@ -215,3 +217,75 @@ def test_generate_ai_narrative_rejects_malformed_uuid_in_finding_ids(ctx: dict[s
         response = client.post(_url(ctx), json=body, headers=_auth(ctx))
     assert response.status_code == 422
     assert response.json()["code"] == "VALIDATION_FAILED"
+
+
+def test_ai_narrative_dedups_blocks_quarantined_circuit_breaker_list_and_edit(
+    db_session: Session, ctx: dict[str, str]
+) -> None:
+    from app.core.redis_client import get_optional_redis_client
+    from app.models.finding import Finding
+
+    class _LowCeilingRedis:
+        def get(self, key: str) -> str | None:
+            return "0.000001" if key == "admin:ai:spend_ceiling_usd" else None
+
+    app.dependency_overrides[get_llm_adapter] = lambda: _FakeAdapter()
+    try:
+        with TestClient(app) as client:
+            # Duplicate finding_ids deduped cleanly
+            dup_body = _request_body(ctx)
+            dup_body["finding_ids"] = [ctx["finding_id"], ctx["finding_id"]]
+            r_ok = client.post(_url(ctx), json=dup_body, headers=_auth(ctx))
+            assert r_ok.status_code == 200
+            narrative_id = r_ok.json()["id"]
+            assert narrative_id is not None
+
+            # Out-of-scope / quarantined finding rejected 422
+            q_id = client.post(
+                f"/api/v1/workspaces/{ctx['workspace_id']}/projects/{ctx['project_id']}/findings/manual",
+                json={**_MANUAL_FINDING, "title": "OOS", "target_host": "other.example.org"},
+                headers=_auth(ctx),
+            ).json()["id"]
+            q_body = _request_body(ctx)
+            q_body["finding_ids"] = [q_id]
+            assert client.post(_url(ctx), json=q_body, headers=_auth(ctx)).status_code == 422
+
+            # Circuit breaker active triggers deterministic fallback without calling LLM
+            app.dependency_overrides[get_optional_redis_client] = lambda: _LowCeilingRedis()
+            fb = client.post(_url(ctx), json=_request_body(ctx), headers=_auth(ctx))
+            assert fb.status_code == 200
+            assert fb.json()["is_fallback"] is True
+
+            # List & edit narrative with HTML sanitization + approval status
+            listed = client.get(_url(ctx), headers=_auth(ctx))
+            assert listed.status_code == 200
+            assert len(listed.json()) == 2
+
+            updated = client.put(
+                f"{_url(ctx)}/{narrative_id}",
+                json={
+                    "executive_summary": "<script>alert(1)</script>Clean summary",
+                    "business_impact": '<p onclick="evil()">Low</p>',
+                    "remediations": [
+                        {
+                            "cwe_id": "CWE-89",
+                            "vuln_title": "SQLi <iframe src='x'></iframe>",
+                            "remediation_guidance": 'Use <a href="javascript:x()">params</a>.',
+                        }
+                    ],
+                    "approval_status": "APPROVED",
+                },
+                headers=_auth(ctx),
+            )
+            assert updated.status_code == 200
+            up_data = updated.json()
+            assert up_data["approval_status"] == "APPROVED"
+            assert "<script>" not in up_data["narratives"]["executive_summary"]
+            assert "onclick" not in up_data["narratives"]["business_impact"]
+            assert "<iframe" not in up_data["narratives"]["remediations"][0]["vuln_title"]
+
+            # Clean up reference check
+            assert db_session.query(Finding).filter_by(id=uuid.UUID(ctx["finding_id"])).count() == 1
+    finally:
+        app.dependency_overrides.pop(get_optional_redis_client, None)
+        app.dependency_overrides.pop(get_llm_adapter, None)

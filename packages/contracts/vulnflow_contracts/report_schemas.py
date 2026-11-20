@@ -1,5 +1,6 @@
 """PDF report compilation contracts — SDD §2.6.1.5 (FR-REP / UC-14, UC-14d)."""
 
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -65,3 +66,15 @@ class ReportDownloadResponse(BaseModel):
 
     download_url: str
     expires_in_seconds: int = Field(gt=0)
+
+
+class ReportSummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    project_id: str
+    report_title: str
+    version: str
+    watermark_applied: bool
+    generated_at: datetime
+    download_url: str

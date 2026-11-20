@@ -1,6 +1,7 @@
 """PLAN.md FASE 4.4 — IngestRouter (SDD §2.6.1.2; EC-04/EC-08/EC-09/EC-10)."""
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from app.core.redis_client import get_redis_client_factory
@@ -39,8 +40,8 @@ _PROJECT = {
     "name": "Audit",
     "client_name": "Klien",
     "target_scope": ["*.klien.com"],
-    "roe_start_date": "2026-10-01T00:00:00Z",
-    "roe_end_date": "2026-11-01T00:00:00Z",
+    "roe_start_date": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+    "roe_end_date": (datetime.now(UTC) + timedelta(days=30)).isoformat(),
 }
 
 
@@ -106,7 +107,12 @@ def test_batch_ingest_creates_finding_and_encrypts_poc(
 
     assert response.status_code == 201
     body = response.json()
-    assert body == {"new_findings_count": 1, "duplicate_findings_count": 0, "quarantined_count": 0}
+    assert body == {
+        "new_findings_count": 1,
+        "duplicate_findings_count": 0,
+        "quarantined_count": 0,
+        "reopened_findings_count": 0,
+    }
 
     finding = db_session.query(Finding).filter_by(project_id=uuid.UUID(ctx["project_id"])).one()
     poc = db_session.query(ProofOfConcept).filter_by(finding_id=finding.id).one()
@@ -135,6 +141,7 @@ def test_batch_ingest_deduplicates_identical_findings(
         "new_findings_count": 1,
         "duplicate_findings_count": 1,
         "quarantined_count": 0,
+        "reopened_findings_count": 0,
     }
 
 
@@ -372,6 +379,7 @@ def test_batch_ingest_idempotency_key_short_circuits_reprocessing(
                 "new_findings_count": 1,
                 "duplicate_findings_count": 0,
                 "quarantined_count": 0,
+                "reopened_findings_count": 0,
             }
         )
         all_findings = (
@@ -450,3 +458,119 @@ def test_batch_ingest_rejects_api_key_for_different_workspace(
         )
 
     assert response.status_code == 401
+
+
+def test_ingest_auto_reopens_remediated_and_quarantined_unselected(
+    db_session: Session, workspace_project_and_api_key: dict[str, str]
+) -> None:
+    ctx = workspace_project_and_api_key
+    payload = {
+        "scan_metadata": {
+            "scanner_name": "nuclei",
+            "scanner_version": "v3",
+            "scan_duration_seconds": 1,
+        },
+        "findings": [
+            _one_finding(),
+            _one_finding(cwe_id="CWE-79", target_host="evil.outside.com"),
+        ],
+    }
+
+    with TestClient(app) as client:
+        first = client.post(
+            _batch_url(ctx), json=payload, headers={"X-VulnFlow-API-Key": ctx["api_key"]}
+        )
+        assert first.status_code == 201
+        in_scope = (
+            db_session.query(Finding)
+            .filter_by(project_id=uuid.UUID(ctx["project_id"]), cwe_id="CWE-89")
+            .one()
+        )
+        out_scope = (
+            db_session.query(Finding)
+            .filter_by(project_id=uuid.UUID(ctx["project_id"]), cwe_id="CWE-79")
+            .one()
+        )
+        assert in_scope.is_curated_for_report is True
+        assert out_scope.is_quarantined is True
+        assert out_scope.is_curated_for_report is False
+
+        in_scope.status = "REMEDIATED"
+        in_scope.is_curated_for_report = False
+        db_session.commit()
+
+        second = client.post(
+            _batch_url(ctx), json=payload, headers={"X-VulnFlow-API-Key": ctx["api_key"]}
+        )
+        assert second.status_code == 201
+        assert second.json()["reopened_findings_count"] == 1
+        db_session.refresh(in_scope)
+        assert in_scope.status == "REOPENED"
+        assert in_scope.is_curated_for_report is True
+
+
+def test_ingest_blocks_expired_roe_and_archived_project(
+    db_session: Session, workspace_project_and_api_key: dict[str, str]
+) -> None:
+    from app.models.audit_log import AuditLog
+    from app.models.project import Project
+
+    ctx = workspace_project_and_api_key
+    project = db_session.get(Project, uuid.UUID(ctx["project_id"]))
+    assert project is not None
+    project.roe_start_date = datetime.now(UTC) - timedelta(days=20)
+    project.roe_end_date = datetime.now(UTC) - timedelta(days=5)
+    db_session.commit()
+
+    payload = {
+        "scan_metadata": {
+            "scanner_name": "nuclei",
+            "scanner_version": "v3",
+            "scan_duration_seconds": 1,
+        },
+        "findings": [_one_finding()],
+    }
+    with TestClient(app) as client:
+        blocked = client.post(
+            _batch_url(ctx), json=payload, headers={"X-VulnFlow-API-Key": ctx["api_key"]}
+        )
+        assert blocked.status_code == 403
+        assert (
+            db_session.query(AuditLog)
+            .filter_by(action="INGEST_BLOCKED_ROE_EXPIRED", target_entity=f"project:{project.id}")
+            .count()
+            == 1
+        )
+
+        project.roe_end_date = datetime.now(UTC) + timedelta(days=5)
+        project.status = "ARCHIVED"
+        db_session.commit()
+        archived = client.post(
+            _batch_url(ctx), json=payload, headers={"X-VulnFlow-API-Key": ctx["api_key"]}
+        )
+        assert archived.status_code == 403
+
+        # Restore active + test manual duplicate returns 409
+        project.status = "ACTIVE"
+        db_session.commit()
+        manual_url = (
+            f"/api/v1/workspaces/{ctx['workspace_id']}/projects/{ctx['project_id']}/findings/manual"
+        )
+        manual_payload = {
+            "title": "Manual Finding",
+            "severity": "HIGH",
+            "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+            "cwe_id": "CWE-200",
+            "target_host": "rogue.outside.com",
+            "proof_of_concept": {"raw_evidence": "proof"},
+        }
+        login_resp = client.post(
+            "/api/v1/auth/login",
+            json={"email": _REGISTRATION["email"], "password": _REGISTRATION["password"]},
+        )
+        headers = {"Authorization": f"Bearer {login_resp.json()['access_token']}"}
+        m1 = client.post(manual_url, json=manual_payload, headers=headers)
+        assert m1.status_code == 201
+        assert m1.json()["is_quarantined"] is True
+        m2 = client.post(manual_url, json=manual_payload, headers=headers)
+        assert m2.status_code == 409

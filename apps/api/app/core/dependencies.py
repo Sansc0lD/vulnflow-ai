@@ -148,3 +148,9 @@ def require_api_key(
     if not x_vulnflow_api_key:
         raise AuthenticationError("Missing X-VulnFlow-API-Key header.")
     return authenticate_api_key(x_vulnflow_api_key, workspace_id, db)
+
+
+def require_superadmin(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.is_superadmin:
+        raise PermissionDeniedError("Superadmin privileges required.")
+    return current_user

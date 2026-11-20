@@ -1,9 +1,17 @@
 """Workspace & project CRUD contracts — SDD UC-04..UC-06a (added FASE 4.3)."""
 
 from datetime import datetime
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from vulnflow_contracts.auth_schemas import NormalizedEmail, WorkspaceRole
 
@@ -32,7 +40,36 @@ class WorkspaceResponse(BaseModel):
     custom_logo_url: str | None = None
     brand_primary_color: str
     brand_secondary_color: str
+    confidentiality_text: str | None = None
     created_at: datetime
+
+
+class WorkspaceDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    password: str = Field(min_length=1, max_length=128)
+    confirm_workspace_name: str = Field(min_length=1, max_length=150)
+
+
+class WorkspaceMemberResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: str
+    email: str
+    full_name: str
+    role: WorkspaceRole
+
+
+class UpdateMemberRoleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: WorkspaceRole
+
+
+class AcceptInvitationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    invitation_token: str = Field(min_length=10, max_length=2000)
 
 
 class InviteMemberRequest(BaseModel):
@@ -129,3 +166,92 @@ class AssignLeadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     lead_pentester_id: str
+
+
+class APIKeySummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    label: str
+    is_active: bool
+    last_used_at: datetime | None = None
+    created_by_user_id: str
+
+
+class ImageUploadRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str = Field(min_length=1, max_length=255)
+    content_type: Literal["image/png", "image/jpeg", "image/svg+xml"]
+    data_base64: str = Field(min_length=4, max_length=7_500_000)
+
+
+class LogoUploadResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    custom_logo_url: str
+    storage_path: str
+
+
+class ProjectUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=150)
+    client_name: str | None = Field(default=None, min_length=1, max_length=150)
+    target_scope: list[str] | None = Field(default=None, min_length=1)
+    roe_start_date: datetime | None = None
+    roe_end_date: datetime | None = None
+    timezone: str | None = Field(default=None, max_length=50)
+    status: Literal["ACTIVE", "ARCHIVED"] | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def _validate_timezone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        try:
+            ZoneInfo(value)
+        except Exception:
+            raise ValueError(f"Invalid IANA timezone: {value}") from None
+        return value
+
+    @field_validator("roe_start_date", "roe_end_date")
+    @classmethod
+    def _roe_must_be_aware(cls, value: datetime | None) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            raise ValueError("ROE datetime must be timezone-aware")
+        return value
+
+    @model_validator(mode="after")
+    def _validate_roe_range(self) -> "ProjectUpdateRequest":
+        if (
+            self.roe_start_date is not None
+            and self.roe_end_date is not None
+            and self.roe_end_date <= self.roe_start_date
+        ):
+            raise ValueError("roe_end_date must be after roe_start_date")
+        return self
+
+
+class AuditLogEntryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    created_at: datetime
+    workspace_id: str
+    actor_user_id: str | None = None
+    action: str
+    target_entity: str
+    ip_address: str
+    details: dict[str, Any]
+
+
+class PaginatedAuditLogResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[AuditLogEntryResponse]
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1)
+    offset: int = Field(ge=0)

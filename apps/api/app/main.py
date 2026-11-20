@@ -4,6 +4,7 @@ Global exception handling, CORS, and security headers. Routers are
 registered here as each one is implemented (FASE 4.2+).
 """
 
+import logging
 import os
 import secrets
 from collections.abc import Awaitable, Callable, Mapping
@@ -17,7 +18,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.exceptions import AppError
-from app.routers import ai, auth, billing, ingest, projects, reports, triage, workspaces
+from app.routers import admin, ai, auth, billing, ingest, projects, reports, triage, workspaces
 from vulnflow_contracts import ErrorCode, StandardErrorEnvelope
 
 # Default docs/redoc are disabled here and re-registered below as custom
@@ -39,6 +40,7 @@ app.include_router(reports.router)
 app.include_router(reports.workspace_reports_router)
 app.include_router(billing.router)
 app.include_router(billing.webhook_router)
+app.include_router(admin.router)
 
 _SECURITY_HEADERS = {
     "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
@@ -179,10 +181,19 @@ async def _http_exception_handler(_: Request, exc: StarletteHTTPException) -> JS
     return _error_response(exc.status_code, code, message, headers=exc.headers)
 
 
+_logger = logging.getLogger("vulnflow.api")
+
+
 @app.exception_handler(Exception)
-async def _unhandled_exception_handler(_: Request, __: Exception) -> JSONResponse:
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     # Never leak internal exception details (stack traces, DB errors) to
     # the client — SDD §2.5.1 Information Disclosure mitigation.
+    _logger.exception(
+        "Unhandled exception on %s %s",
+        request.method,
+        request.url.path,
+        exc_info=exc,
+    )
     return _error_response(
         500, ErrorCode.INTERNAL_SERVER_ERROR, "An internal server error occurred."
     )

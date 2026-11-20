@@ -97,6 +97,7 @@ class BatchIngestResponse(BaseModel):
     new_findings_count: int = Field(ge=0)
     duplicate_findings_count: int = Field(ge=0)
     quarantined_count: int = Field(default=0, ge=0)
+    reopened_findings_count: int = Field(default=0, ge=0)
 
 
 class ManualFindingRequest(BaseModel):
@@ -132,6 +133,7 @@ class ManualFindingResponse(BaseModel):
     cwe_id: str
     source_tool: Literal[SourceTool.MANUAL] = SourceTool.MANUAL
     status: FindingStatus
+    is_quarantined: bool = False
     created_at: datetime
 
 
@@ -152,3 +154,70 @@ class FindingStatusResponse(BaseModel):
     status: FindingStatus
     version: int
     is_curated_for_report: bool
+
+
+class FindingListItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    project_id: str
+    title: str
+    severity: Severity
+    cvss_score: float = Field(ge=0.0, le=10.0)
+    cvss_version: str
+    cvss_vector: str
+    cwe_id: str
+    target_host: str
+    target_port: int | None = None
+    endpoint_path: str
+    protocol: str
+    source_tool: str
+    status: FindingStatus
+    is_curated_for_report: bool
+    is_quarantined: bool
+    version: int
+    created_at: datetime
+
+
+class FindingSummaryMetrics(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    total: int = Field(ge=0)
+    curated: int = Field(ge=0)
+    quarantined: int = Field(ge=0)
+    by_severity: dict[str, int]
+    by_status: dict[str, int]
+
+
+class FindingListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    items: list[FindingListItemResponse]
+    total: int = Field(ge=0)
+    limit: int = Field(ge=1)
+    offset: int = Field(ge=0)
+    summary: FindingSummaryMetrics
+
+
+class FindingPoCResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    finding_id: str
+    raw_evidence: str
+    reproduction_steps: list[str]
+    attachment_file_urls: list[str]
+    key_version: int
+
+
+class UpdateFindingCurationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    is_curated_for_report: bool
+    unquarantine: bool = False
+
+
+class PoCAttachmentResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    attachment_url: str
+    storage_path: str

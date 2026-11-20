@@ -141,3 +141,49 @@ def test_push_free_tier_prompt_declined_aborts(
     )
 
     assert result.exit_code == 1
+
+
+def test_push_displays_reopened_count_and_global_top50_and_status_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import httpx
+
+    sent_batches: list[list[object]] = []
+
+    def _fake_push(client: object, **kwargs: object) -> BatchIngestResponse:
+        findings = kwargs["findings"]
+        assert isinstance(findings, list)
+        sent_batches.append(findings)
+        if len(sent_batches) == 1:
+            raise FreeTierBatchLimitError("Free tier limited to 50.")
+        return BatchIngestResponse(
+            new_findings_count=50,
+            duplicate_findings_count=0,
+            quarantined_count=0,
+            reopened_findings_count=2,
+        )
+
+    monkeypatch.setattr(main_module, "push_batch", _fake_push)
+    file_path = _nuclei_file(tmp_path, n=520)  # spans 2 chunks (>500), top-50 is global single push
+
+    result = runner.invoke(
+        app,
+        ["push", "--project", "prj-01", "--type", "nuclei", "--file", str(file_path)],
+        input="y\n",
+    )
+    assert result.exit_code == 0
+    assert len(sent_batches) == 2
+    assert len(sent_batches[1]) == 50
+    assert "2 reopened" in result.stdout
+
+    real_httpx_client = httpx.Client
+
+    def _mock_client(*args: object, **kwargs: object) -> httpx.Client:
+        return real_httpx_client(
+            transport=httpx.MockTransport(lambda req: httpx.Response(200, json={"status": "ok"}))
+        )
+
+    monkeypatch.setattr(main_module.httpx, "Client", _mock_client)
+    st_res = runner.invoke(app, ["status"])
+    assert st_res.exit_code == 0
+    assert "OK (200)" in st_res.stdout

@@ -182,3 +182,61 @@ def test_create_project_strips_newlines_from_target_scope(db_session: Session) -
     assert response.status_code == 201
     body = response.json()
     assert body["target_scope"] == ["*.bankxyz.co.id", "10.20.0.0/24"]
+
+
+def test_get_update_archive_project_and_reject_viewer_as_lead(db_session: Session) -> None:
+    with TestClient(app) as client:
+        token, workspace_id = _register_and_get_token(client)
+        headers = _auth_headers(token)
+        project = client.post(
+            f"/api/v1/workspaces/{workspace_id}/projects",
+            json=_VALID_PROJECT,
+            headers=headers,
+        ).json()
+        project_id = project["id"]
+
+        fetched = client.get(
+            f"/api/v1/workspaces/{workspace_id}/projects/{project_id}",
+            headers=headers,
+        )
+        assert fetched.status_code == 200
+        assert fetched.json()["name"] == "Audit Bank XYZ"
+
+        bad_roe = client.patch(
+            f"/api/v1/workspaces/{workspace_id}/projects/{project_id}",
+            json={"roe_end_date": "2026-09-01T00:00:00Z"},
+            headers=headers,
+        )
+        assert bad_roe.status_code == 422
+
+        updated = client.patch(
+            f"/api/v1/workspaces/{workspace_id}/projects/{project_id}",
+            json={"name": "Audit Revised", "status": "ARCHIVED"},
+            headers=headers,
+        )
+        assert updated.status_code == 200
+        assert updated.json()["name"] == "Audit Revised"
+        assert updated.json()["status"] == "ARCHIVED"
+
+        inv = client.post(
+            f"/api/v1/workspaces/{workspace_id}/members",
+            headers=headers,
+            json={"email": "viewer-lead@example.com", "role": "VIEWER"},
+        ).json()["invitation_token"]
+        viewer = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "viewer-lead@example.com",
+                "password": "Str0ng!Passw0rd",
+                "full_name": "Viewer",
+                "workspace_name": "Unused",
+                "invitation_token": inv,
+            },
+        ).json()
+
+        lead_resp = client.patch(
+            f"/api/v1/workspaces/{workspace_id}/projects/{project_id}/lead",
+            json={"lead_pentester_id": viewer["user_id"]},
+            headers=headers,
+        )
+        assert lead_resp.status_code == 422

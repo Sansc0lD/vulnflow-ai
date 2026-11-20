@@ -340,3 +340,206 @@ def test_compile_report_cleans_up_s3_when_commit_fails(
         )
 
     assert len(s3.deleted) == 1
+
+
+def test_compile_report_dynamic_version_quarantine_filter_and_pro_branding(
+    session: Session,
+) -> None:
+    from app.models.finding import Finding
+    from app.models.workspace import Workspace
+
+    project = _make_project_with_finding(session, quota=10, used=0)
+    sub = session.query(Subscription).filter_by(workspace_id=project.workspace_id).one()
+    sub.tier = "PRO"
+    ws = session.get(Workspace, project.workspace_id)
+    assert ws is not None
+    ws.confidentiality_text = "Strictly Confidential NDA"
+    ws.brand_primary_color = "#123456"
+    session.add(
+        Finding(
+            project_id=project.id,
+            dedup_hash="quarantined-hash",
+            title="Quarantined Should Exclude",
+            severity="HIGH",
+            cvss_score=7.5,
+            cvss_version="3.1",
+            cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+            cwe_id="CWE-79",
+            target_host="evil.outside.com",
+            target_port=443,
+            endpoint_path="/x",
+            protocol="https",
+            source_tool="nuclei",
+            is_curated_for_report=True,
+            is_quarantined=True,
+        )
+    )
+    session.commit()
+
+    s3 = _FakeS3()
+    html_outputs: list[str] = []
+
+    def _capture(html: str) -> bytes:
+        html_outputs.append(html)
+        return b"%PDF-1.7"
+
+    r1 = compile_report(
+        session,
+        s3,
+        workspace_id=project.workspace_id,
+        project_id=project.id,
+        report_title="Audit Report",
+        executive_summary="Exec summary",
+        business_impact="Impact",
+        watermark_text=None,
+        theme_options={"primary_color": "#0F172A", "show_cover_page": True},
+        remediations=[
+            {"cwe_id": "CWE-89", "vuln_title": "SQLi", "remediation_guidance": "Parameterize"}
+        ],
+        render_fn=_capture,
+    )
+    r2 = compile_report(
+        session,
+        s3,
+        workspace_id=project.workspace_id,
+        project_id=project.id,
+        report_title="Audit Report",
+        executive_summary="Exec summary",
+        business_impact="Impact",
+        watermark_text=None,
+        render_fn=_capture,
+    )
+    assert r1.version == "v1.0"
+    assert r2.version == "v1.1"
+    assert "Quarantined Should Exclude" not in html_outputs[0]
+    assert "Strictly Confidential NDA" in html_outputs[0]
+    assert "Parameterize" in html_outputs[0]
+
+
+def test_compile_report_embeds_workspace_logo_honors_explicit_ids_and_radar_flag(
+    session: Session,
+) -> None:
+    import io
+    import uuid
+    from decimal import Decimal
+
+    class _LogoAwareS3(_FakeS3):
+        def __init__(self) -> None:
+            super().__init__()
+            self.downloaded_keys: list[str] = []
+
+        def download_bytes(self, key: str) -> tuple[bytes, str] | None:
+            self.downloaded_keys.append(key)
+            return b"\x89PNG\r\n\x1a\nlogo", "image/png"
+
+    class _FakeBotoClient:
+        def get_object(self, *, Bucket: str, Key: str) -> dict[str, object]:
+            assert Bucket == "vulnflow-reports"
+            return {"Body": io.BytesIO(b"fake-bytes"), "ContentType": "image/png"}
+
+    from app.services.s3_storage import S3StorageClient
+
+    s3_wrapper = S3StorageClient(_FakeBotoClient(), bucket="vulnflow-reports")  # type: ignore[arg-type]
+    downloaded = s3_wrapper.download_bytes("workspaces/x/logo.png")
+    assert downloaded == (b"fake-bytes", "image/png")
+
+    project = _make_project_with_finding(session, quota=10, used=0)
+    sub = session.query(Subscription).filter_by(workspace_id=project.workspace_id).one()
+    sub.tier = "PRO"
+    ws = session.get(Workspace, project.workspace_id)
+    assert ws is not None
+    ws.custom_logo_url = (
+        f"http://127.0.0.1:9000/vulnflow-reports/workspaces/{project.workspace_id}/logo.png"
+        "?X-Amz-Algorithm=AWS4-HMAC-SHA256"
+    )
+
+    uncurated = Finding(
+        project_id=project.id,
+        dedup_hash="uncurated-hash",
+        title="Explicitly Selected Uncurated Finding",
+        severity="MEDIUM",
+        cvss_score=Decimal("5.3"),
+        cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+        cwe_id="CWE-200",
+        target_host="app.klien.com",
+        source_tool="manual",
+        is_curated_for_report=False,
+        is_quarantined=False,
+    )
+    quarantined = Finding(
+        project_id=project.id,
+        dedup_hash="quar-explicit-hash",
+        title="Quarantined Even If Selected",
+        severity="HIGH",
+        cvss_score=Decimal("7.5"),
+        cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+        cwe_id="CWE-79",
+        target_host="outside.example.com",
+        source_tool="manual",
+        is_curated_for_report=False,
+        is_quarantined=True,
+    )
+    false_positive = Finding(
+        project_id=project.id,
+        dedup_hash="fp-explicit-hash",
+        title="False Positive Even If Selected",
+        severity="LOW",
+        cvss_score=Decimal("3.1"),
+        cvss_vector="CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+        cwe_id="CWE-200",
+        target_host="app.klien.com",
+        source_tool="manual",
+        status="FALSE_POSITIVE",
+        is_curated_for_report=False,
+        is_quarantined=False,
+    )
+    session.add_all([uncurated, quarantined, false_positive])
+    session.commit()
+
+    storage = _LogoAwareS3()
+    html_outputs: list[str] = []
+
+    def _capture(html: str) -> bytes:
+        html_outputs.append(html)
+        return b"%PDF-1.7"
+
+    compile_report(
+        session,
+        storage,
+        workspace_id=project.workspace_id,
+        project_id=project.id,
+        report_title="Logo & Selection Report",
+        executive_summary="Summary",
+        business_impact="Impact",
+        watermark_text=None,
+        finding_ids=[str(uncurated.id), str(quarantined.id), str(false_positive.id)],
+        theme_options={"show_cover_page": True, "show_cvss_radar": False},
+        render_fn=_capture,
+    )
+
+    assert storage.downloaded_keys == [f"workspaces/{project.workspace_id}/logo.png"]
+    assert "data:image/png;base64," in html_outputs[0]
+    assert "Explicitly Selected Uncurated Finding" in html_outputs[0]
+    assert "Quarantined Even If Selected" not in html_outputs[0]
+    assert "False Positive Even If Selected" not in html_outputs[0]
+    assert "CVSS v3.1 Risk Profile Radar" not in html_outputs[0]
+
+    # Cross-workspace S3 logo URL must not be downloaded via another workspace's storage path
+    storage.downloaded_keys.clear()
+    ws.custom_logo_url = (
+        f"http://127.0.0.1:9000/vulnflow-reports/workspaces/{uuid.uuid4()}/logo.png"
+    )
+    session.commit()
+    compile_report(
+        session,
+        storage,
+        workspace_id=project.workspace_id,
+        project_id=project.id,
+        report_title="Cross-Workspace Logo Guard",
+        executive_summary="Summary",
+        business_impact="Impact",
+        watermark_text=None,
+        render_fn=_capture,
+    )
+    assert storage.downloaded_keys == []
+    assert "data:image/png;base64," not in html_outputs[1]

@@ -16,6 +16,11 @@ class AuthenticationError(AppError):
     error_code = ErrorCode.AUTHENTICATION_FAILED
 
 
+class MFARequiredError(AppError):
+    status_code = 401
+    error_code = ErrorCode.MFA_REQUIRED
+
+
 class PermissionDeniedError(AppError):
     status_code = 403
     error_code = ErrorCode.PERMISSION_DENIED

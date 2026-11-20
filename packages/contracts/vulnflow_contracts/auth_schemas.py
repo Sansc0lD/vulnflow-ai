@@ -4,9 +4,30 @@ import re
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, field_validator
+from email_validator import EmailNotValidError, validate_email
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_validator
 
-NormalizedEmail = Annotated[EmailStr, AfterValidator(str.lower)]
+
+def _validate_and_normalize_email(value: str) -> str:
+    """Normalize email to lowercase while permitting seeded `.local` domains."""
+    stripped = value.strip()
+    if "@" not in stripped:
+        raise ValueError("value is not a valid email address: must contain @")
+    local_part, _, domain = stripped.rpartition("@")
+    try:
+        if domain.lower().endswith(".local"):
+            prefix = domain[:-6]
+            if not prefix or prefix.startswith(".") or prefix.endswith("."):
+                raise ValueError("value is not a valid email address: invalid .local domain")
+            validated = validate_email(f"{local_part}@{prefix}.example", check_deliverability=False)
+            return f"{validated.local_part}@{validated.domain[:-8]}.local".lower()
+        validated = validate_email(stripped, check_deliverability=False)
+    except EmailNotValidError as exc:
+        raise ValueError(str(exc)) from exc
+    return validated.normalized.lower()
+
+
+NormalizedEmail = Annotated[str, AfterValidator(_validate_and_normalize_email)]
 """Email lowercased before it ever reaches the database.
 
 `EmailStr` only normalizes the domain, so 'Alice@corp.com' survives validation
@@ -20,10 +41,10 @@ the same invariant for any writer that bypasses this contract.
 """
 
 _PASSWORD_RULES: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"[A-Z]"), "harus memuat minimal satu huruf besar"),
-    (re.compile(r"[a-z]"), "harus memuat minimal satu huruf kecil"),
-    (re.compile(r"[0-9]"), "harus memuat minimal satu angka"),
-    (re.compile(r"[^A-Za-z0-9]"), "harus memuat minimal satu karakter khusus"),
+    (re.compile(r"[A-Z]"), "must contain at least one uppercase letter"),
+    (re.compile(r"[a-z]"), "must contain at least one lowercase letter"),
+    (re.compile(r"[0-9]"), "must contain at least one digit"),
+    (re.compile(r"[^A-Za-z0-9]"), "must contain at least one special character"),
 )
 
 
@@ -36,23 +57,23 @@ def _validate_password_complexity(password: str) -> str:
     domain service (FASE 3), bukan di lapisan kontrak data ini.
     """
     if "\0" in password:
-        raise ValueError("kata sandi tidak boleh memuat karakter null byte")
+        raise ValueError("Password must not contain null bytes")
     if len(password) < 8:
-        raise ValueError("kata sandi minimal 8 karakter")
+        raise ValueError("Password must be at least 8 characters long")
     if len(password) > 128:
-        raise ValueError("kata sandi maksimal 128 karakter")
+        raise ValueError("Password must be at most 128 characters long")
     for pattern, message in _PASSWORD_RULES:
         if not pattern.search(password):
-            raise ValueError(f"kata sandi {message}")
+            raise ValueError(f"Password {message}")
     return password
 
 
 def _validate_login_password(password: str) -> str:
     """F4-MED-22: batasi panjang password login & larang null byte untuk anti-DoS."""
     if "\0" in password:
-        raise ValueError("kata sandi tidak boleh memuat karakter null byte")
+        raise ValueError("Password must not contain null bytes")
     if len(password) > 128:
-        raise ValueError("kata sandi maksimal 128 karakter")
+        raise ValueError("Password must be at most 128 characters long")
     return password
 
 
@@ -86,6 +107,7 @@ class LoginRequest(BaseModel):
 
     email: NormalizedEmail
     password: str = Field(max_length=128)
+    totp_code: str | None = Field(default=None, pattern=r"^\d{6}$")
 
     _validate_password = field_validator("password")(_validate_login_password)
 
@@ -94,8 +116,10 @@ class UserDTO(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    email: EmailStr
+    email: NormalizedEmail
     full_name: str
+    is_superadmin: bool = False
+    mfa_enabled: bool = False
 
 
 class WorkspaceMembership(BaseModel):
@@ -112,7 +136,7 @@ class RegisterResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user_id: str
-    email: EmailStr
+    email: NormalizedEmail
     full_name: str
     workspace_id: str
     access_token: str
@@ -130,3 +154,51 @@ class TokenResponse(BaseModel):
     expires_in: int = Field(gt=0)
     user: UserDTO
     workspaces: list[WorkspaceMembership] = Field(default_factory=list)
+
+
+class MeResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user: UserDTO
+    workspaces: list[WorkspaceMembership] = Field(default_factory=list)
+
+
+class ForgotPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: NormalizedEmail
+
+
+class ForgotPasswordResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str
+
+
+class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    token: str = Field(min_length=10, max_length=1000)
+    new_password: str
+
+    _validate_password = field_validator("new_password")(_validate_password_complexity)
+
+
+class DeleteAccountRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    password: str = Field(min_length=1, max_length=128)
+
+
+class MFASetupResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    secret: str
+    otpauth_uri: str
+    enabled: bool
+
+
+class MFAVerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    totp_code: str = Field(pattern=r"^\d{6}$")

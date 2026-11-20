@@ -40,6 +40,13 @@ def get_redis_client() -> redis.Redis:
     return _client
 
 
+def get_optional_redis_client() -> Any | None:
+    try:
+        return get_redis_client()
+    except RuntimeError:
+        return None
+
+
 def get_redis_client_factory() -> Callable[[], Any]:
     """Injects the *function*, not a connected client.
 

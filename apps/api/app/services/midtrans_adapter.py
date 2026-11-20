@@ -43,3 +43,33 @@ class MidtransAdapter:
             raise MidtransCheckoutError(
                 "Midtrans response missing or malformed token/redirect_url."
             ) from exc
+
+    def get_transaction_status(self, *, order_id: str) -> dict[str, str]:
+        status_base = (
+            "https://api.midtrans.com/v2"
+            if self._url == _PRODUCTION_URL
+            else "https://api.sandbox.midtrans.com/v2"
+        )
+        auth = base64.b64encode(f"{self._server_key}:".encode()).decode()
+        try:
+            response = self._client.get(
+                f"{status_base}/{order_id}/status",
+                headers={"Authorization": f"Basic {auth}"},
+            )
+        except httpx.TransportError as exc:
+            raise MidtransCheckoutError("Could not reach Midtrans status API.") from exc
+
+        if response.status_code >= 400:
+            raise MidtransCheckoutError(
+                f"Midtrans status lookup failed with status {response.status_code}."
+            )
+        try:
+            data = response.json()
+            return {
+                "transaction_status": str(data.get("transaction_status", "")),
+                "fraud_status": str(data.get("fraud_status", "")),
+                "payment_type": str(data.get("payment_type", "")),
+                "gross_amount": str(data.get("gross_amount", "")),
+            }
+        except (TypeError, ValueError) as exc:
+            raise MidtransCheckoutError("Midtrans status response was not valid JSON.") from exc

@@ -9,14 +9,22 @@ the database.
 import time
 import uuid
 from collections.abc import Callable
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.audit import get_client_ip, record_audit_log
 from app.core.crypto import encrypt_poc, get_encryption_key
 from app.core.dependencies import get_db, require_api_key, require_workspace_role
-from app.core.exceptions import BatchLimitExceededError, ConflictError, ResourceNotFoundError
+from app.core.exceptions import (
+    BatchLimitExceededError,
+    ConflictError,
+    PermissionDeniedError,
+    ResourceNotFoundError,
+    ValidationFailedError,
+)
 from app.core.redis_client import RedisLike, get_redis_client_factory
 from app.domain.cvss import calculate_base_score
 from app.domain.deduplication import compute_dedup_hash
@@ -103,13 +111,54 @@ def _check_batch_size(db: Session, workspace_id: uuid.UUID, count: int) -> None:
         )
 
 
+def _normalize_utc(dt: datetime) -> datetime:
+    return dt.replace(tzinfo=UTC) if dt.tzinfo is None else dt
+
+
+def _ensure_project_accepts_ingest(
+    db: Session,
+    workspace_id: uuid.UUID,
+    project: Project,
+    *,
+    actor_user_id: uuid.UUID | None,
+    ip_address: str,
+) -> None:
+    if project.status != "ACTIVE":
+        raise PermissionDeniedError("Cannot ingest findings into an archived project.")
+
+    now = datetime.now(UTC)
+    roe_start = _normalize_utc(project.roe_start_date)
+    roe_end = _normalize_utc(project.roe_end_date)
+    if now < roe_start or now > roe_end:
+        record_audit_log(
+            db,
+            workspace_id=workspace_id,
+            actor_user_id=actor_user_id,
+            action="INGEST_BLOCKED_ROE_EXPIRED",
+            target_entity=f"project:{project.id}",
+            ip_address=ip_address,
+            details={
+                "roe_start_date": roe_start.isoformat(),
+                "roe_end_date": roe_end.isoformat(),
+            },
+        )
+        db.commit()
+        raise PermissionDeniedError("Ingestion blocked: outside Rules of Engagement (ROE) window.")
+
+
 def _process_ingest_batch(
     db: Session,
     workspace_id: uuid.UUID,
     project_id: uuid.UUID,
     payload: BatchIngestRequest,
+    *,
+    actor_user_id: uuid.UUID | None = None,
+    ip_address: str = "unknown",
 ) -> BatchIngestResponse:
     project = _get_project_or_404(db, workspace_id, project_id)
+    _ensure_project_accepts_ingest(
+        db, workspace_id, project, actor_user_id=actor_user_id, ip_address=ip_address
+    )
     _check_batch_size(db, workspace_id, len(payload.findings))
 
     scope_entries = project.target_scope.split("\n")
@@ -117,6 +166,7 @@ def _process_ingest_batch(
     new_count = 0
     duplicate_count = 0
     quarantined_count = 0
+    reopened_count = 0
 
     for item in payload.findings:
         dedup_hash = compute_dedup_hash(
@@ -126,21 +176,35 @@ def _process_ingest_batch(
             port=item.target_port,
             endpoint_path=item.endpoint_path,
         )
-        already_exists = (
+        existing = (
             db.query(Finding).filter_by(project_id=project_id, dedup_hash=dedup_hash).one_or_none()
-            is not None
         )
-        if already_exists:
-            duplicate_count += 1
+        if existing is not None:
+            if existing.status == "REMEDIATED":
+                existing.status = "REOPENED"
+                existing.is_curated_for_report = not existing.is_quarantined
+                record_audit_log(
+                    db,
+                    workspace_id=workspace_id,
+                    actor_user_id=actor_user_id,
+                    action="FINDING_AUTO_REOPENED",
+                    target_entity=f"finding:{existing.id}",
+                    ip_address=ip_address,
+                    details={"dedup_hash": dedup_hash, "project_id": str(project_id)},
+                )
+                reopened_count += 1
+            else:
+                duplicate_count += 1
             continue
 
         is_quarantined = not is_target_in_scope(item.target_host, scope_entries)
-        if is_quarantined:
-            quarantined_count += 1
 
         cvss_score = item.cvss_score
         if cvss_score is None and item.cvss_vector:
-            cvss_score = float(calculate_base_score(item.cvss_vector))
+            try:
+                cvss_score = float(calculate_base_score(item.cvss_vector))
+            except ValueError as exc:
+                raise ValidationFailedError(f"Invalid CVSS vector: {exc}") from exc
 
         # F4-LOW-14: Wrap concurrent inserts in nested transaction
         # to handle duplicate dedup_hash cleanly
@@ -161,6 +225,7 @@ def _process_ingest_batch(
                     protocol=item.protocol.value,
                     source_tool=item.source_tool.value,
                     is_quarantined=is_quarantined,
+                    is_curated_for_report=not is_quarantined,
                 )
                 db.add(finding)
                 db.flush()
@@ -182,6 +247,8 @@ def _process_ingest_batch(
                 )
                 db.flush()
             new_count += 1
+            if is_quarantined:
+                quarantined_count += 1
         except IntegrityError:
             duplicate_count += 1
             continue
@@ -191,6 +258,7 @@ def _process_ingest_batch(
         new_findings_count=new_count,
         duplicate_findings_count=duplicate_count,
         quarantined_count=quarantined_count,
+        reopened_findings_count=reopened_count,
     )
 
 
@@ -199,8 +267,9 @@ def ingest_batch(
     workspace_id: uuid.UUID,
     project_id: uuid.UUID,
     payload: BatchIngestRequest,
+    request: Request,
     db: Session = Depends(get_db),
-    _api_key: APIKey = Depends(require_api_key),
+    api_key: APIKey = Depends(require_api_key),
     redis_client_factory: Callable[[], RedisLike] = Depends(get_redis_client_factory),
     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ) -> BatchIngestResponse:
@@ -222,11 +291,7 @@ def ingest_batch(
     if idempotency_key:
         redis_client = redis_client_factory()
         cache_key = _idempotency_cache_key(workspace_id, project_id, idempotency_key)
-        claimed = bool(
-            redis_client.set(
-                cache_key, _IDEMPOTENCY_PENDING_SENTINEL, nx=True, ex=IDEMPOTENCY_TTL_SECONDS
-            )
-        )
+        claimed = bool(redis_client.set(cache_key, _IDEMPOTENCY_PENDING_SENTINEL, nx=True, ex=60))
         if not claimed:
             cached_response = _await_idempotent_result(redis_client, cache_key)
             if cached_response is not None:
@@ -236,7 +301,14 @@ def ingest_batch(
             )
 
     try:
-        result = _process_ingest_batch(db, workspace_id, project_id, payload)
+        result = _process_ingest_batch(
+            db,
+            workspace_id,
+            project_id,
+            payload,
+            actor_user_id=api_key.created_by_user_id,
+            ip_address=get_client_ip(request),
+        )
     except Exception:
         # Release the claim on any failure (validation, scope, DB error) so
         # a genuine retry under the same key isn't stuck behind a pending
@@ -256,12 +328,24 @@ def create_manual_finding(
     workspace_id: uuid.UUID,
     project_id: uuid.UUID,
     payload: ManualFindingRequest,
+    request: Request,
     db: Session = Depends(get_db),
-    _member: WorkspaceMember = Depends(_require_creator_role),
+    current_member: WorkspaceMember = Depends(_require_creator_role),
 ) -> ManualFindingResponse:
     project = _get_project_or_404(db, workspace_id, project_id)
+    _ensure_project_accepts_ingest(
+        db,
+        workspace_id,
+        project,
+        actor_user_id=current_member.user_id,
+        ip_address=get_client_ip(request),
+    )
 
-    cvss_score = float(calculate_base_score(payload.cvss_vector))
+    try:
+        cvss_score = float(calculate_base_score(payload.cvss_vector))
+    except ValueError as exc:
+        raise ValidationFailedError(f"Invalid CVSS vector: {exc}") from exc
+
     dedup_hash = compute_dedup_hash(
         project_id=str(project_id),
         cwe_id=payload.cwe_id,
@@ -285,24 +369,29 @@ def create_manual_finding(
         protocol=payload.protocol.value,
         source_tool="manual",
         is_quarantined=is_quarantined,
+        is_curated_for_report=not is_quarantined,
     )
-    db.add(finding)
-    db.flush()
+    try:
+        db.add(finding)
+        db.flush()
 
-    ciphertext, iv_nonce, auth_tag = encrypt_poc(
-        payload.proof_of_concept.raw_evidence.encode("utf-8"), get_encryption_key()
-    )
-    db.add(
-        ProofOfConcept(
-            finding_id=finding.id,
-            encrypted_raw_evidence=ciphertext,
-            iv_nonce=iv_nonce,
-            auth_tag=auth_tag,
-            reproduction_steps=payload.proof_of_concept.reproduction_steps,
-            attachment_file_urls=[str(url) for url in payload.proof_of_concept.attachment_urls],
+        ciphertext, iv_nonce, auth_tag = encrypt_poc(
+            payload.proof_of_concept.raw_evidence.encode("utf-8"), get_encryption_key()
         )
-    )
-    db.commit()
+        db.add(
+            ProofOfConcept(
+                finding_id=finding.id,
+                encrypted_raw_evidence=ciphertext,
+                iv_nonce=iv_nonce,
+                auth_tag=auth_tag,
+                reproduction_steps=payload.proof_of_concept.reproduction_steps,
+                attachment_file_urls=[str(url) for url in payload.proof_of_concept.attachment_urls],
+            )
+        )
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ConflictError("A duplicate finding already exists in this project.") from exc
 
     return ManualFindingResponse(
         id=str(finding.id),
@@ -313,5 +402,6 @@ def create_manual_finding(
         cvss_vector=finding.cvss_vector,
         cwe_id=finding.cwe_id,
         status=finding.status,  # type: ignore[arg-type]
+        is_quarantined=finding.is_quarantined,
         created_at=finding.created_at,
     )

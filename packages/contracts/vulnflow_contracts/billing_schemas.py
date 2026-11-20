@@ -1,5 +1,6 @@
 """Midtrans Snap billing contracts — SDD §2.6.3 (FR-SUB / UC-16)."""
 
+from datetime import datetime
 from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -62,3 +63,19 @@ class MidtransWebhookPayload(BaseModel):
     transaction_status: MidtransTransactionStatus
     payment_type: str
     transaction_time: str
+    fraud_status: str | None = None
+
+
+class SubscriptionStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    workspace_id: str
+    tier: str
+    status: str
+    monthly_report_quota: int = Field(ge=0)
+    reports_used_this_month: int = Field(ge=0)
+    remaining_reports: int = Field(ge=0)
+    quota_reset_date: datetime
+    payment_status: str
+    payment_type: str | None = None
+    midtrans_order_id: str | None = None

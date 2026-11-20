@@ -412,3 +412,94 @@ def test_webhook_ignores_settlement_on_terminal_order(
         db_session.refresh(subscription)
         assert subscription.payment_status == "EXPIRE"
         assert subscription.tier == "FREE"
+
+
+def test_subscription_status_sync_fraud_challenge_and_delayed_expire(
+    db_session: Session, ctx: dict[str, str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    from app.routers.billing import get_midtrans_adapter
+
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", "test-server-key")
+
+    class _FakeSyncAdapter:
+        def __init__(self, status_payload: dict[str, str]) -> None:
+            self._status_payload = status_payload
+
+        def create_transaction(self, *, order_id: str, gross_amount: int) -> tuple[str, str]:
+            return "snap-tok", "https://snap.local/pay"
+
+        def get_transaction_status(self, *, order_id: str) -> dict[str, str]:
+            return self._status_payload
+
+    billing_base = f"/api/v1/workspaces/{ctx['workspace_id']}/billing"
+    app.dependency_overrides[get_midtrans_adapter] = lambda: _FakeSyncAdapter(
+        {
+            "order_id": "ignored",
+            "transaction_status": "settlement",
+            "payment_type": "qris",
+        }
+    )
+    try:
+        with TestClient(app) as client:
+            sub = (
+                db_session.query(Subscription)
+                .filter_by(workspace_id=uuid.UUID(ctx["workspace_id"]))
+                .one()
+            )
+            sub.reports_used_this_month = 2
+            sub.quota_reset_date = datetime.now(UTC) - timedelta(days=1)
+            db_session.commit()
+
+            st = client.get(f"{billing_base}/subscription", headers=_auth(ctx))
+            assert st.status_code == 200
+            assert st.json()["reports_used_this_month"] == 0
+            assert st.json()["remaining_reports"] == 3
+
+            checkout = client.post(
+                f"{billing_base}/checkout", json={"tier": "PRO"}, headers=_auth(ctx)
+            ).json()
+            order_id = checkout["order_id"]
+
+            # CAPTURE with fraud_status=challenge stays PENDING_REVIEW
+            sig = _sign(order_id, "200", "750000.00", "test-server-key")
+            ch_resp = client.post(
+                "/api/v1/billing/webhook/midtrans",
+                json={
+                    "order_id": order_id,
+                    "status_code": "200",
+                    "gross_amount": "750000.00",
+                    "signature_key": sig,
+                    "transaction_status": "capture",
+                    "payment_type": "credit_card",
+                    "transaction_time": "2026-10-24 10:00:00",
+                    "fraud_status": "challenge",
+                },
+            )
+            assert ch_resp.json()["status"] == "PENDING_REVIEW"
+
+            # Sync upgrades to PRO via Midtrans status check
+            synced = client.post(f"{billing_base}/sync", headers=_auth(ctx))
+            assert synced.status_code == 200
+            assert synced.json()["tier"] == "PRO"
+            assert synced.json()["payment_status"] == "SETTLEMENT"
+
+            # Delayed EXPIRE on already settled order is ignored without downgrading
+            exp_resp = client.post(
+                "/api/v1/billing/webhook/midtrans",
+                json={
+                    "order_id": order_id,
+                    "status_code": "200",
+                    "gross_amount": "750000.00",
+                    "signature_key": sig,
+                    "transaction_status": "expire",
+                    "payment_type": "qris",
+                    "transaction_time": "2026-10-24 10:15:00",
+                },
+            )
+            assert exp_resp.json()["status"] == "IGNORED_ALREADY_SETTLED"
+            db_session.refresh(sub)
+            assert sub.tier == "PRO"
+    finally:
+        app.dependency_overrides.pop(get_midtrans_adapter, None)

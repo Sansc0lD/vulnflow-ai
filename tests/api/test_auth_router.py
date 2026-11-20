@@ -209,3 +209,158 @@ def test_register_rejects_replayed_invitation_token(db_session: Session) -> None
         }
         resp2 = client.post("/api/v1/auth/register", json=payload2)
         assert resp2.status_code in (401, 409)
+
+
+def test_me_logout_forgot_reset_mfa_and_delete_account(db_session: Session) -> None:
+    from app.core.totp import compute_totp
+    from app.services.email_service import get_email_sender
+
+    sent_emails: list[tuple[str, str, str, str]] = []
+
+    class _FakeEmailSender:
+        def send_email(
+            self, *, to_email: str, subject: str, html_body: str, text_body: str
+        ) -> bool:
+            sent_emails.append((to_email, subject, html_body, text_body))
+            return True
+
+    app.dependency_overrides[get_email_sender] = lambda: _FakeEmailSender()
+    try:
+        with TestClient(app) as client:
+            reg = client.post("/api/v1/auth/register", json=_VALID_REGISTRATION).json()
+            token = reg["access_token"]
+            headers = {"Authorization": f"Bearer {token}"}
+
+            me = client.get("/api/v1/auth/me", headers=headers)
+            assert me.status_code == 200
+            assert me.json()["user"]["email"] == _VALID_REGISTRATION["email"]
+            assert len(me.json()["workspaces"]) == 1
+
+            # MFA setup + verify
+            mfa_setup = client.post("/api/v1/auth/mfa/setup", headers=headers)
+            assert mfa_setup.status_code == 200
+            secret = mfa_setup.json()["secret"]
+            assert client.post(
+                "/api/v1/auth/mfa/verify",
+                headers=headers,
+                json={"totp_code": compute_totp(secret)},
+            ).json() == {"valid": True}
+            assert (
+                client.post(
+                    "/api/v1/auth/mfa/verify",
+                    headers=headers,
+                    json={"totp_code": "000000" if compute_totp(secret) != "000000" else "999999"},
+                ).status_code
+                == 401
+            )
+
+            # Forgot password sends token; unknown email stays 200 neutral
+            unknown_fp = client.post(
+                "/api/v1/auth/forgot-password", json={"email": "nobody@example.com"}
+            )
+            assert unknown_fp.status_code == 200
+            fp = client.post(
+                "/api/v1/auth/forgot-password", json={"email": _VALID_REGISTRATION["email"]}
+            )
+            assert fp.status_code == 200
+            assert len(sent_emails) == 1
+            import urllib.parse
+
+            reset_url = [line for line in sent_emails[0][3].splitlines() if "token=" in line][0]
+            reset_token = urllib.parse.parse_qs(urllib.parse.urlsplit(reset_url).query)["token"][0]
+
+            # Complete password reset & verify single-use + old token revoked
+            rp = client.post(
+                "/api/v1/auth/reset-password",
+                json={"token": reset_token, "new_password": "N3w!Str0ngPassw0rd"},
+            )
+            assert rp.status_code == 200
+            assert (
+                client.post(
+                    "/api/v1/auth/reset-password",
+                    json={"token": reset_token, "new_password": "An0ther!Passw0rd"},
+                ).status_code
+                == 401
+            )
+            assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
+
+            # Non-superadmin user with TOTP MFA enabled must supply valid TOTP on login
+            login_no_mfa = client.post(
+                "/api/v1/auth/login",
+                json={"email": _VALID_REGISTRATION["email"], "password": "N3w!Str0ngPassw0rd"},
+            )
+            assert login_no_mfa.status_code == 401
+            assert login_no_mfa.json()["code"] == "MFA_REQUIRED"
+
+            wrong_code = "000000" if compute_totp(secret) != "000000" else "999999"
+            login_bad_mfa = client.post(
+                "/api/v1/auth/login",
+                json={
+                    "email": _VALID_REGISTRATION["email"],
+                    "password": "N3w!Str0ngPassw0rd",
+                    "totp_code": wrong_code,
+                },
+            )
+            assert login_bad_mfa.status_code == 401
+            assert login_bad_mfa.json()["code"] == "AUTHENTICATION_FAILED"
+
+            login2 = client.post(
+                "/api/v1/auth/login",
+                json={
+                    "email": _VALID_REGISTRATION["email"],
+                    "password": "N3w!Str0ngPassw0rd",
+                    "totp_code": compute_totp(secret),
+                },
+            )
+            assert login2.status_code == 200
+            headers2 = {"Authorization": f"Bearer {login2.json()['access_token']}"}
+
+            # EC-03: Sole MANAGER cannot delete account while active workspace has no co-manager
+            del_blocked = client.request(
+                "DELETE",
+                "/api/v1/auth/me",
+                headers=headers2,
+                json={"password": "N3w!Str0ngPassw0rd"},
+            )
+            assert del_blocked.status_code == 409
+
+            # Add co-manager -> deletion now succeeds; logout revokes session first
+            assert client.post("/api/v1/auth/logout", headers=headers2).status_code == 200
+            assert client.get("/api/v1/auth/me", headers=headers2).status_code == 401
+
+            login3 = client.post(
+                "/api/v1/auth/login",
+                json={
+                    "email": _VALID_REGISTRATION["email"],
+                    "password": "N3w!Str0ngPassw0rd",
+                    "totp_code": compute_totp(secret),
+                },
+            ).json()
+            headers3 = {"Authorization": f"Bearer {login3['access_token']}"}
+            ws_id = login3["workspaces"][0]["id"]
+            inv = client.post(
+                f"/api/v1/workspaces/{ws_id}/members",
+                headers=headers3,
+                json={"email": "comgr@example.com", "role": "MANAGER"},
+            ).json()["invitation_token"]
+            client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": "comgr@example.com",
+                    "password": "Str0ng!Passw0rd",
+                    "full_name": "Co Manager",
+                    "workspace_name": "Unused",
+                    "invitation_token": inv,
+                },
+            )
+
+            del_ok = client.request(
+                "DELETE",
+                "/api/v1/auth/me",
+                headers=headers3,
+                json={"password": "N3w!Str0ngPassw0rd"},
+            )
+            assert del_ok.status_code == 200
+            assert client.get("/api/v1/auth/me", headers=headers3).status_code == 401
+    finally:
+        app.dependency_overrides.pop(get_email_sender, None)

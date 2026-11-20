@@ -61,7 +61,9 @@ def main(
 
 @app.command()
 def configure(
-    token: str = typer.Option(..., "--token", help="API key issued by a workspace MANAGER."),
+    token: str = typer.Option(
+        ..., "--token", help="API key issued by a workspace MANAGER or PENTESTER."
+    ),
     workspace: str = typer.Option(..., "--workspace", help="Active workspace id (EC-01)."),
     api_url: str = typer.Option(DEFAULT_API_URL, "--api-url", help="VulnFlow AI API base URL."),
 ) -> None:
@@ -175,7 +177,7 @@ def push(
     file_hash = compute_file_hash(file)
     chunks = chunk_findings(findings)
 
-    new_total = duplicate_total = quarantined_total = 0
+    new_total = duplicate_total = quarantined_total = reopened_total = 0
     with httpx.Client(timeout=30.0) as client:
         for index, chunk in enumerate(chunks):
             chunk_index = index if len(chunks) > 1 else None
@@ -198,7 +200,7 @@ def push(
                 ):
                     typer.echo("[-] Upload cancelled.", err=True)
                     raise typer.Exit(code=1) from exc
-                top_n = sorted(chunk, key=lambda f: _SEVERITY_RANK.get(f.severity.value, 99))[
+                top_n = sorted(findings, key=lambda f: _SEVERITY_RANK.get(f.severity.value, 99))[
                     :FREE_TIER_TOP_N
                 ]
                 result = push_batch(
@@ -209,8 +211,13 @@ def push(
                     api_key=config.api_key,
                     findings=top_n,
                     scan_metadata=scan_metadata,
-                    idempotency_key=f"{idempotency_key}:top{FREE_TIER_TOP_N}",
+                    idempotency_key=f"{file_hash}:global-top{FREE_TIER_TOP_N}",
                 )
+                new_total += result.new_findings_count
+                duplicate_total += result.duplicate_findings_count
+                quarantined_total += result.quarantined_count
+                reopened_total += result.reopened_findings_count
+                break
             except (IngestTransientError, IngestClientError) as exc:
                 typer.echo(f"[-] Upload failed: {exc}", err=True)
                 raise typer.Exit(code=1) from exc
@@ -218,11 +225,40 @@ def push(
             new_total += result.new_findings_count
             duplicate_total += result.duplicate_findings_count
             quarantined_total += result.quarantined_count
+            reopened_total += result.reopened_findings_count
 
-    typer.echo(
+    summary = (
         f"[+] SUCCESS: {new_total} new, {duplicate_total} duplicated, "
         f"{quarantined_total} quarantined"
     )
+    if reopened_total > 0:
+        summary += f", {reopened_total} reopened"
+    typer.echo(summary)
+
+
+@app.command()
+def status() -> None:
+    """Display active CLI configuration and probe VulnFlow API health."""
+    try:
+        config = load_config()
+    except ConfigNotFoundError as exc:
+        typer.echo(f"[-] {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    masked_key = f"{config.api_key[:8]}..." if len(config.api_key) > 8 else "***"
+    typer.echo(f"API URL:      {config.api_url}")
+    typer.echo(f"Workspace ID: {config.active_workspace_id}")
+    typer.echo(f"API Key:      {masked_key}")
+
+    try:
+        with httpx.Client(timeout=5.0) as client:
+            resp = client.get(f"{config.api_url.rstrip('/')}/health")
+        if resp.status_code == 200:
+            typer.echo("API Health:   OK (200)")
+        else:
+            typer.echo(f"API Health:   HTTP {resp.status_code}")
+    except httpx.HTTPError as exc:
+        typer.echo(f"API Health:   UNREACHABLE ({exc})")
 
 
 if __name__ == "__main__":

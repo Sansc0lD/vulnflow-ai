@@ -63,6 +63,6 @@ def test_ec14_ghostwriter_triggers_fallback_when_llm_fails() -> None:
 
     assert is_fallback is True
     assert tokens_consumed == 0
-    assert "katalog CWE internal (EC-14)" in content.executive_summary
+    assert "internal CWE catalog (EC-14)" in content.executive_summary
     assert len(content.remediations) == 1
     assert content.remediations[0].cwe_id == "CWE-89"

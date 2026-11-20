@@ -122,3 +122,59 @@ def generate_api_key() -> tuple[str, str]:
     raw_key = f"vf_live_{secrets.token_urlsafe(32)}"
     key_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
     return raw_key, key_hash
+
+
+_PASSWORD_RESET_PURPOSE = "password_reset"  # nosec: B105 — JWT token type tag, not a secret
+_PASSWORD_RESET_EXPIRES_IN_SECONDS = 900
+
+
+def _password_reset_signing_key(secret_key: str, password_hash: str) -> str:
+    return hashlib.sha256(f"{secret_key}:{password_hash}".encode()).hexdigest()
+
+
+def create_password_reset_token(
+    *,
+    user_id: str,
+    password_hash: str,
+    secret_key: str,
+    algorithm: str = "HS256",
+    expires_in_seconds: int = _PASSWORD_RESET_EXPIRES_IN_SECONDS,
+) -> str:
+    """Stateless reset token signed with server secret + user's current password hash.
+
+    Once the user updates their password, `password_hash` changes, automatically
+    invalidating every previously issued reset token without storing state (UC-02a).
+    """
+    now = int(time.time())
+    payload: dict[str, Any] = {
+        "purpose": _PASSWORD_RESET_PURPOSE,
+        "sub": user_id,
+        "iat": now,
+        "exp": now + expires_in_seconds,
+    }
+    signing_key = _password_reset_signing_key(secret_key, password_hash)
+    return jwt.encode(payload, signing_key, algorithm=algorithm)
+
+
+def extract_unverified_reset_user_id(token: str) -> str:
+    """Extract subject UUID before cryptographic verification against the user's hash."""
+    payload = jwt.decode(
+        token,
+        options={"verify_signature": False, "verify_exp": False},
+    )
+    if payload.get("purpose") != _PASSWORD_RESET_PURPOSE:
+        raise jwt.InvalidTokenError("Token is not a password reset token.")
+    sub = payload.get("sub")
+    if not isinstance(sub, str) or not sub:
+        raise jwt.InvalidTokenError("Password reset token missing subject.")
+    return sub
+
+
+def decode_password_reset_token(
+    token: str, *, password_hash: str, secret_key: str, algorithm: str = "HS256"
+) -> dict[str, Any]:
+    signing_key = _password_reset_signing_key(secret_key, password_hash)
+    payload = jwt.decode(token, signing_key, algorithms=[algorithm])
+    if payload.get("purpose") != _PASSWORD_RESET_PURPOSE:
+        raise jwt.InvalidTokenError("Token is not a password reset token.")
+    return payload
