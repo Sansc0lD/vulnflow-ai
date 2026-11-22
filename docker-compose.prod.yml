@@ -1,0 +1,34 @@
+services:
+  api:
+    command:
+      [
+        "gunicorn",
+        "app.main:app",
+        "-k",
+        "uvicorn.workers.UvicornWorker",
+        "-w",
+        "2",
+        "-b",
+        "0.0.0.0:8000",
+      ]
+    environment:
+      - APP_BASE_URL=${PROD_APP_BASE_URL:-http://localhost:${WEB_PORT:-8080}}
+      - CORS_ALLOWED_ORIGINS=${PROD_CORS_ALLOWED_ORIGINS:-http://localhost:${WEB_PORT:-8080}}
+
+  worker:
+    environment:
+      - APP_BASE_URL=${PROD_APP_BASE_URL:-http://localhost:${WEB_PORT:-8080}}
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: vulnflow-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - vulnflow_net
