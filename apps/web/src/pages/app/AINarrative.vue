@@ -172,9 +172,26 @@
         <div v-else class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <!-- Editor / Preview Canvas (8 cols) -->
           <div class="lg:col-span-8 space-y-6">
+            <div
+              v-if="generating && generationStage"
+              role="status"
+              class="border border-white/[0.14] bg-[#08080B] p-4 space-y-2.5 text-xs"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="font-medium text-[#F5F5F3]">{{ generationStage }}</span>
+                <span class="font-mono text-[#8A8D96] tabular-nums">{{ generationProgress }}%</span>
+              </div>
+              <div class="h-1.5 bg-[#050507] border border-white/[0.1] overflow-hidden">
+                <div
+                  class="h-full bg-[#F5F5F3] transition-all duration-300"
+                  :style="{ width: `${generationProgress}%` }"
+                ></div>
+              </div>
+            </div>
+
             <EmptyState
               v-if="!currentNarrative"
-              :icon="Sparkles"
+              :icon="FileText"
               title="No report draft yet"
               description="Select findings on the right and click Generate Draft to create an executive summary, business impact analysis, and fix guidance."
               :action-label="canEdit && selectedFindingIds.length > 0 ? 'Generate Draft' : ''"
@@ -496,7 +513,6 @@ import {
   Plus,
   RefreshCw,
   Save,
-  Sparkles,
   Trash2,
 } from 'lucide-vue-next'
 import AppLayout from '@/components/layout/AppLayout.vue'
@@ -521,6 +537,8 @@ const previewMode = ref(false)
 const language = ref<'id' | 'en'>('en')
 const tone = ref('formal_executive')
 const generating = ref(false)
+const generationStage = ref('')
+const generationProgress = ref(0)
 const saving = ref(false)
 const showWarningModal = ref(false)
 const pendingVersionId = ref<string | null>(null)
@@ -697,17 +715,45 @@ const executeGenerate = async () => {
   if (!wId || !pId) return
 
   generating.value = true
+  generationStage.value = 'Queueing AI draft job...'
+  generationProgress.value = 10
   try {
-    const generated = await api.ai.generateNarrative(wId, pId, {
+    const accepted = await api.ai.generateNarrativeAsync(wId, pId, {
       tone: tone.value,
       language: language.value,
       sections_requested: ['executive_summary', 'business_impact', 'remediations'],
       finding_ids: selectedFindingIds.value,
     })
+
+    let generated: AINarrativeResponse | null = null
+    for (let attempt = 0; attempt < 90; attempt++) {
+      const job = await api.ai.getJobStatus(wId, pId, accepted.job_id)
+      generationStage.value = job.stage || 'Generating draft...'
+      generationProgress.value = job.progress_percentage ?? 50
+      if (job.status === 'COMPLETED' && job.narrative) {
+        generated = job.narrative
+        break
+      }
+      if (job.status === 'COMPLETED') {
+        const latest = await api.ai.listNarratives(wId, pId)
+        generated = latest[0] ?? null
+        break
+      }
+      if (job.status === 'FAILED') {
+        throw new Error(job.error_message || 'AI draft generation failed.')
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 1200))
+    }
+
+    if (!generated) {
+      throw new Error('AI draft generation is still running. Refresh in a moment to view it.')
+    }
+
     narratives.value = [generated, ...narratives.value]
     selectedNarrativeId.value = generated.id || '0'
     syncEditorFromNarrative(generated)
     previewMode.value = false
+    void session.refreshProjectProgress()
     if (generated.is_fallback) {
       toast.warning('Draft generated using standard CWE templates because the AI service is unavailable.')
     } else {
@@ -717,6 +763,8 @@ const executeGenerate = async () => {
     toast.error(err instanceof Error ? err.message : 'Unable to generate report draft.')
   } finally {
     generating.value = false
+    generationStage.value = ''
+    generationProgress.value = 0
   }
 }
 
@@ -739,6 +787,7 @@ const handleSaveNarrative = async (approvalStatus: 'DRAFT' | 'APPROVED') => {
       narratives.value[idx] = updated
     }
     syncEditorFromNarrative(updated)
+    void session.refreshProjectProgress()
     toast.success(
       approvalStatus === 'APPROVED'
         ? 'Draft approved and ready for PDF export.'

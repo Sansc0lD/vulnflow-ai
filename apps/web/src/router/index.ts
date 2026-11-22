@@ -9,6 +9,7 @@ import About from '@/pages/public/About.vue'
 import Solutions from '@/pages/public/Solutions.vue'
 import SolutionDetail from '@/pages/public/SolutionDetail.vue'
 import Contact from '@/pages/public/Contact.vue'
+import VerifyReport from '@/pages/public/VerifyReport.vue'
 
 // Auth Pages
 import Login from '@/pages/app/Login.vue'
@@ -57,6 +58,12 @@ const routes: RouteRecordRaw[] = [
     name: 'contact',
     component: Contact,
     meta: { title: 'Pricing & Estimator — VulnFlow' },
+  },
+  {
+    path: '/verify/:code?',
+    name: 'verify-report',
+    component: VerifyReport,
+    meta: { title: 'Verify Report — VulnFlow' },
   },
 
   // Auth Routes
@@ -162,8 +169,13 @@ router.beforeEach(async (to, _from, next) => {
     try {
       await session.hydrate()
     } catch {
-      next({ path: '/app/login', query: { redirect: to.fullPath } })
-      return
+      if (!authStorage.getToken()) {
+        next({
+          path: '/app/login',
+          query: { reason: 'session_expired', redirect: to.fullPath },
+        })
+        return
+      }
     }
   }
 

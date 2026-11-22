@@ -211,7 +211,7 @@
               </div>
               <div class="border-l-2 border-[#F5F5F3] pl-4 py-1 space-y-1.5">
                 <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-[#8A8D96] flex items-center gap-1.5">
-                  <Sparkles class="h-3.5 w-3.5 text-[#F5F5F3]" aria-hidden="true" />
+                  <FileText class="h-3.5 w-3.5 text-[#F5F5F3]" aria-hidden="true" />
                   <span>AI Executive Summary</span>
                 </div>
                 <p class="text-sm sm:text-base text-[#F5F5F3] leading-relaxed">{{ finding.aiExecutiveSnippet }}</p>
@@ -226,16 +226,19 @@
               </div>
 
               <div class="border border-white/[0.11] bg-[#050507] overflow-hidden">
-                <div class="px-4 py-2.5 border-b border-white/[0.1] flex items-center justify-between">
-                  <span class="font-mono text-xs text-[#D4D4D8]">Suggested Code Change</span>
+                <div class="px-4 py-2.5 border-b border-white/[0.1] flex flex-wrap items-center justify-between gap-2">
+                  <span class="font-mono text-xs text-[#D4D4D8]">Illustrative CWE Remediation Pattern</span>
                   <button
                     type="button"
-                    @click="copyText(finding.patchDiff, 'Suggested code change')"
+                    @click="copyText(finding.patchDiff, 'Remediation pattern')"
                     class="btn-glass px-2.5 py-1 text-xs"
                   >
                     <Copy class="h-3.5 w-3.5" />
                     <span>Copy patch</span>
                   </button>
+                </div>
+                <div class="px-4 py-2 border-b border-white/[0.08] bg-[#08080B] font-mono text-[11px] text-[#8A8D96]">
+                  Reference pattern based on CWE category: private source code and PoC payloads are never sent to AI.
                 </div>
                 <div class="p-4 font-mono text-xs overflow-x-auto space-y-0.5">
                   <div
@@ -386,7 +389,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft, Copy, Key, Lock, ShieldAlert, Sparkles } from 'lucide-vue-next'
+import { ArrowLeft, Copy, FileText, Key, Lock, ShieldAlert } from 'lucide-vue-next'
 import PublicLayout from '@/components/layout/PublicLayout.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import CvssRadarChart from '@/components/ui/CvssRadarChart.vue'

@@ -362,7 +362,230 @@
           </div>
         </div>
       </div>
+
+      <!-- TAB 4: WORKSPACES & PLANS -->
+      <div v-if="activeTab === 'workspaces'" role="tabpanel" class="space-y-6">
+        <!-- Enterprise Inquiries Queue -->
+        <div class="border border-white/[0.11] bg-[#08080B] p-6 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm sm:text-base font-display font-semibold text-[#F5F5F3] tabular-nums">
+              Enterprise Inquiries ({{ inquiries.length }})
+            </h2>
+            <select
+              v-model="inquiryStatusFilter"
+              @change="loadWorkspacesAndInquiries"
+              class="input-glass px-3 py-1.5 text-xs"
+            >
+              <option value="">All inquiry statuses</option>
+              <option value="NEW">New</option>
+              <option value="CONTACTED">Contacted</option>
+              <option value="PROVISIONED">Provisioned</option>
+              <option value="DECLINED">Declined</option>
+            </select>
+          </div>
+
+          <SkeletonBlock v-if="loadingWorkspaces" variant="table-row" :count="3" />
+
+          <div v-else class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="border-b border-white/[0.1] font-mono uppercase text-[10px] tracking-wider text-[#8A8D96]">
+                <tr>
+                  <th class="py-2 pr-3">Company / Contact</th>
+                  <th class="py-2 px-3">Team / Est. Reports</th>
+                  <th class="py-2 px-3">Status</th>
+                  <th class="py-2 px-3">Requirements</th>
+                  <th class="py-2 pl-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/[0.08]">
+                <tr v-if="inquiries.length === 0">
+                  <td colspan="5" class="py-6 text-center text-[#8A8D96]">
+                    No Enterprise inquiries found.
+                  </td>
+                </tr>
+                <tr v-for="inq in inquiries" :key="inq.id">
+                  <td class="py-2.5 pr-3">
+                    <div class="font-medium text-[#F5F5F3]">{{ inq.company_name }}</div>
+                    <div class="text-[11px] font-mono text-[#8A8D96]">
+                      {{ inq.contact_name }} ({{ inq.contact_email }})
+                    </div>
+                  </td>
+                  <td class="py-2.5 px-3 font-mono text-[#D4D4D8] tabular-nums">
+                    {{ inq.team_size }} · {{ inq.estimated_monthly_reports ?? '-' }}/mo
+                  </td>
+                  <td class="py-2.5 px-3">
+                    <select
+                      :value="inq.status"
+                      @change="handleInquiryStatusChange(inq, $event)"
+                      class="input-glass px-2 py-1 text-xs"
+                    >
+                      <option value="NEW">NEW</option>
+                      <option value="CONTACTED">CONTACTED</option>
+                      <option value="PROVISIONED">PROVISIONED</option>
+                      <option value="DECLINED">DECLINED</option>
+                    </select>
+                  </td>
+                  <td class="py-2.5 px-3 text-[#D4D4D8] max-w-xs truncate" :title="inq.requirements">
+                    {{ inq.requirements }}
+                  </td>
+                  <td class="py-2.5 pl-3 text-right">
+                    <button
+                      v-if="inq.workspace_id"
+                      type="button"
+                      @click="quickProvisionFromInquiry(inq)"
+                      class="btn-glass px-2.5 py-1 text-xs border-emerald-400/35 text-emerald-300 hover:bg-emerald-500/20"
+                    >
+                      Provision Enterprise
+                    </button>
+                    <span v-else class="font-mono text-[11px] text-[#8A8D96]">No WS linked</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Workspace Subscriptions -->
+        <div class="border border-white/[0.11] bg-[#08080B] p-6 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 class="text-sm sm:text-base font-display font-semibold text-[#F5F5F3] tabular-nums">
+              Workspaces &amp; Plan Limits ({{ workspaceSubs.length }})
+            </h2>
+            <select
+              v-model="workspaceTierFilter"
+              @change="loadWorkspacesAndInquiries"
+              class="input-glass px-3 py-1.5 text-xs"
+            >
+              <option value="">All tiers</option>
+              <option value="FREE">Free</option>
+              <option value="PRO">Pro</option>
+              <option value="ENTERPRISE">Enterprise</option>
+            </select>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead class="border-b border-white/[0.1] font-mono uppercase text-[10px] tracking-wider text-[#8A8D96]">
+                <tr>
+                  <th class="py-2 pr-3">Workspace</th>
+                  <th class="py-2 px-3">Tier</th>
+                  <th class="py-2 px-3">PDF Quota</th>
+                  <th class="py-2 px-3">CLI Batch Limit</th>
+                  <th class="py-2 px-3">Managers</th>
+                  <th class="py-2 pl-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-white/[0.08]">
+                <tr v-for="ws in workspaceSubs" :key="ws.workspace_id">
+                  <td class="py-2.5 pr-3">
+                    <div class="font-medium text-[#F5F5F3]">{{ ws.workspace_name }}</div>
+                    <div class="text-[11px] font-mono text-[#8A8D96]">{{ ws.workspace_id }}</div>
+                  </td>
+                  <td class="py-2.5 px-3"><StatusBadge :status="ws.tier" /></td>
+                  <td class="py-2.5 px-3 font-mono text-[#D4D4D8] tabular-nums">
+                    {{ ws.reports_used_this_month }} / {{ ws.is_unlimited ? 'Unlimited' : ws.monthly_report_quota }}
+                  </td>
+                  <td class="py-2.5 px-3 font-mono text-[#D4D4D8] tabular-nums">
+                    {{ ws.custom_batch_limit ?? (ws.tier === 'FREE' ? 50 : ws.tier === 'ENTERPRISE' ? 2000 : 500) }}
+                  </td>
+                  <td class="py-2.5 px-3 font-mono text-[#8A8D96]">
+                    {{ ws.manager_emails.join(', ') || '-' }}
+                  </td>
+                  <td class="py-2.5 pl-3 text-right">
+                    <button
+                      type="button"
+                      @click="openSubscriptionModal(ws)"
+                      class="btn-glass px-2.5 py-1 text-xs"
+                    >
+                      Manage Plan
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <!-- Workspace Subscription Override Modal -->
+    <BaseModal
+      :open="Boolean(subOverrideTarget)"
+      :title="`Manage Plan: ${subOverrideTarget?.workspace_name || ''}`"
+      subtitle="Override subscription tier, monthly PDF quota, or Enterprise CLI batch limit."
+      max-width="md"
+      @close="subOverrideTarget = null"
+    >
+      <form id="sub-override-form" @submit.prevent="confirmSubscriptionOverride" class="space-y-3.5 text-xs">
+        <div class="space-y-1">
+          <label for="sub-tier" class="text-[#D4D4D8] font-medium block">Tier</label>
+          <select id="sub-tier" v-model="subForm.tier" class="input-glass w-full px-3 py-2 text-xs">
+            <option value="FREE">FREE</option>
+            <option value="PRO">PRO</option>
+            <option value="ENTERPRISE">ENTERPRISE</option>
+          </select>
+        </div>
+
+        <label class="flex items-center gap-2 text-[#D4D4D8] cursor-pointer">
+          <input type="checkbox" v-model="subForm.unlimited" class="bg-[#050507] border-white/25" />
+          <span>Unlimited monthly PDF reports (-1)</span>
+        </label>
+
+        <div v-if="!subForm.unlimited" class="space-y-1">
+          <label for="sub-quota" class="text-[#D4D4D8] font-medium block">Monthly Report Quota</label>
+          <input
+            id="sub-quota"
+            v-model.number="subForm.monthly_report_quota"
+            type="number"
+            min="0"
+            max="100000"
+            required
+            class="input-glass w-full px-3 py-2 text-xs font-mono"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label for="sub-batch" class="text-[#D4D4D8] font-medium block">
+            Custom CLI Batch Limit (optional, 50-50000)
+          </label>
+          <input
+            id="sub-batch"
+            v-model.number="subForm.custom_batch_limit"
+            type="number"
+            min="50"
+            max="50000"
+            placeholder="2000 for Enterprise default"
+            class="input-glass w-full px-3 py-2 text-xs font-mono"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label for="sub-reason" class="text-[#D4D4D8] font-medium block">Audit Reason</label>
+          <input
+            id="sub-reason"
+            v-model.trim="subForm.reason"
+            type="text"
+            required
+            minlength="3"
+            placeholder="Enterprise contract provisioned..."
+            class="input-glass w-full px-3 py-2 text-xs"
+          />
+        </div>
+      </form>
+      <template #footer>
+        <button type="button" @click="subOverrideTarget = null" class="btn-glass px-4 py-2 text-xs">
+          Cancel
+        </button>
+        <button
+          type="submit"
+          form="sub-override-form"
+          :disabled="savingSubOverride"
+          class="btn-platinum px-4 py-2 text-xs disabled:opacity-50"
+        >
+          {{ savingSubOverride ? 'Saving...' : 'Save Plan' }}
+        </button>
+      </template>
+    </BaseModal>
 
     <!-- Suspend Modal -->
     <BaseModal
@@ -454,8 +677,11 @@ import StatusBadge from '@/components/ui/StatusBadge.vue'
 import {
   api,
   type AdminUserSummary,
+  type AdminWorkspaceSubscriptionSummary,
   type AITelemetryResponse,
   type AuditLogEntry,
+  type EnterpriseInquiryResponse,
+  type EnterpriseInquiryStatus,
 } from '@/services/api'
 import { session } from '@/stores/session'
 import { toast } from '@/stores/toast'
@@ -466,6 +692,7 @@ const router = useRouter()
 const tabs = [
   { id: 'telemetry', label: 'AI Usage' },
   { id: 'users', label: 'Users' },
+  { id: 'workspaces', label: 'Workspaces & Plans' },
   { id: 'audits', label: 'Audit Logs' },
 ] as const
 type AdminTabId = (typeof tabs)[number]['id']
@@ -476,6 +703,8 @@ watch(
   (tabParam) => {
     if (tabParam === 'users') {
       activeTab.value = 'users'
+    } else if (tabParam === 'workspaces') {
+      activeTab.value = 'workspaces'
     } else if (tabParam === 'audits') {
       activeTab.value = 'audits'
     } else {
@@ -577,8 +806,110 @@ async function loadAuditLogs(offset = 0): Promise<void> {
 }
 
 onMounted(() => {
-  void Promise.all([loadTelemetry(), loadUsers(0), loadAuditLogs(0)])
+  void Promise.all([
+    loadTelemetry(),
+    loadUsers(0),
+    loadAuditLogs(0),
+    loadWorkspacesAndInquiries(),
+  ])
 })
+
+const workspaceSubs = ref<AdminWorkspaceSubscriptionSummary[]>([])
+const inquiries = ref<EnterpriseInquiryResponse[]>([])
+const loadingWorkspaces = ref(false)
+const workspaceTierFilter = ref('')
+const inquiryStatusFilter = ref('')
+const subOverrideTarget = ref<AdminWorkspaceSubscriptionSummary | null>(null)
+const savingSubOverride = ref(false)
+const subForm = ref<{
+  tier: 'FREE' | 'PRO' | 'ENTERPRISE'
+  unlimited: boolean
+  monthly_report_quota: number
+  custom_batch_limit: number | null
+  reason: string
+}>({
+  tier: 'ENTERPRISE',
+  unlimited: true,
+  monthly_report_quota: 30,
+  custom_batch_limit: 2000,
+  reason: '',
+})
+
+async function loadWorkspacesAndInquiries(): Promise<void> {
+  loadingWorkspaces.value = true
+  try {
+    const [wsList, inqList] = await Promise.all([
+      api.admin.listWorkspaces({ tier: workspaceTierFilter.value || undefined }),
+      api.admin.listEnterpriseInquiries({ status: inquiryStatusFilter.value || undefined }),
+    ])
+    workspaceSubs.value = wsList
+    inquiries.value = inqList
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Unable to load workspace plans.')
+  } finally {
+    loadingWorkspaces.value = false
+  }
+}
+
+const openSubscriptionModal = (ws: AdminWorkspaceSubscriptionSummary) => {
+  subOverrideTarget.value = ws
+  subForm.value = {
+    tier: (ws.tier === 'PRO' || ws.tier === 'ENTERPRISE' ? ws.tier : 'FREE') as
+      | 'FREE'
+      | 'PRO'
+      | 'ENTERPRISE',
+    unlimited: ws.is_unlimited || ws.monthly_report_quota < 0,
+    monthly_report_quota: ws.monthly_report_quota < 0 ? 100 : ws.monthly_report_quota,
+    custom_batch_limit: ws.custom_batch_limit ?? null,
+    reason: '',
+  }
+}
+
+const quickProvisionFromInquiry = (inq: EnterpriseInquiryResponse) => {
+  const target = workspaceSubs.value.find((w) => w.workspace_id === inq.workspace_id)
+  if (!target) return
+  subOverrideTarget.value = target
+  subForm.value = {
+    tier: 'ENTERPRISE',
+    unlimited: true,
+    monthly_report_quota: 500,
+    custom_batch_limit: 2000,
+    reason: `Provisioned via Enterprise inquiry ${inq.id}`,
+  }
+}
+
+const handleInquiryStatusChange = async (inq: EnterpriseInquiryResponse, event: Event) => {
+  const select = event.target as HTMLSelectElement
+  const nextStatus = select.value as EnterpriseInquiryStatus
+  try {
+    await api.admin.updateEnterpriseInquiry(inq.id, { status: nextStatus })
+    inq.status = nextStatus
+    toast.success(`Inquiry status updated to ${nextStatus}.`)
+  } catch (err: unknown) {
+    select.value = inq.status
+    toast.error(err instanceof Error ? err.message : 'Unable to update inquiry status.')
+  }
+}
+
+const confirmSubscriptionOverride = async () => {
+  if (!subOverrideTarget.value) return
+  savingSubOverride.value = true
+  try {
+    await api.admin.overrideWorkspaceSubscription(subOverrideTarget.value.workspace_id, {
+      tier: subForm.value.tier,
+      monthly_report_quota: subForm.value.unlimited ? -1 : subForm.value.monthly_report_quota,
+      custom_batch_limit: subForm.value.custom_batch_limit || null,
+      reason: subForm.value.reason,
+    })
+    subOverrideTarget.value = null
+    await Promise.all([loadWorkspacesAndInquiries(), loadAuditLogs(auditOffset.value)])
+    toast.success('Workspace plan updated.')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Unable to update workspace plan.')
+  } finally {
+    savingSubOverride.value = false
+  }
+}
 
 const handleUpdateCeiling = async () => {
   updatingCeiling.value = true

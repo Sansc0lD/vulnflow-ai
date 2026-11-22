@@ -77,19 +77,27 @@
           <div class="flex flex-wrap justify-between gap-2 text-xs">
             <span class="text-[#D4D4D8]">Monthly PDF exports</span>
             <span class="text-[#F5F5F3] font-mono font-semibold tabular-nums">
-              {{ usedReports }} / {{ maxReports }} reports ({{ remainingReports }} remaining)
+              <template v-if="isUnlimited">
+                {{ usedReports }} used this month · Unlimited quota
+              </template>
+              <template v-else>
+                {{ usedReports }} / {{ maxReports }} reports ({{ remainingReports }} remaining)
+              </template>
             </span>
           </div>
 
           <div class="h-2 bg-[#050507] border border-white/[0.1] overflow-hidden">
             <div
               :class="['h-full transition-all duration-500', quotaBarClass]"
-              :style="{ width: `${quotaPct}%` }"
+              :style="{ width: `${isUnlimited ? 100 : quotaPct}%` }"
             ></div>
           </div>
 
           <div class="flex flex-wrap justify-between gap-2 text-xs text-[#8A8D96] pt-1">
             <span>Resets on {{ formattedResetDate }}</span>
+            <span v-if="sub?.custom_batch_limit" class="font-mono text-[11px] text-[#D4D4D8]">
+              CLI batch cap: {{ sub.custom_batch_limit }} findings
+            </span>
             <span v-if="sub?.midtrans_order_id" class="font-mono text-[11px]">
               Latest order: {{ sub.midtrans_order_id }} ({{ sub.payment_status }}{{ sub.payment_type ? ` · ${sub.payment_type}` : '' }})
             </span>
@@ -97,7 +105,7 @@
         </div>
 
         <div
-          v-if="usedReports >= maxReports"
+          v-if="!isUnlimited && usedReports >= maxReports"
           role="alert"
           class="p-3.5 bg-red-500/10 border border-red-400/25 text-red-200 text-xs flex items-center gap-2.5"
         >
@@ -108,7 +116,7 @@
         </div>
 
         <div
-          v-else-if="quotaPct >= 80"
+          v-else-if="!isUnlimited && quotaPct >= 80"
           role="status"
           class="p-3.5 bg-amber-500/10 border border-amber-400/25 text-amber-200 text-xs flex items-center gap-2.5 tabular-nums"
         >
@@ -297,13 +305,15 @@
           >
             Enterprise plan active
           </button>
-          <router-link
+          <button
             v-else
-            to="/contact"
-            class="btn-glass w-full py-2.5 text-xs justify-center"
+            type="button"
+            :disabled="!isManager"
+            @click="openEnterpriseModal"
+            class="btn-glass w-full py-2.5 text-xs justify-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Contact sales
-          </router-link>
+            {{ isManager ? 'Request Enterprise plan' : 'Only Managers can request upgrade' }}
+          </button>
         </div>
       </div>
 
@@ -401,6 +411,115 @@
         </div>
       </div>
     </BaseModal>
+
+    <!-- Enterprise Inquiry Modal -->
+    <BaseModal
+      :open="enterpriseModalOpen"
+      title="Request Enterprise Plan"
+      subtitle="Submit your workspace capacity and deployment requirements. Our platform team will provision Enterprise limits once approved."
+      max-width="md"
+      @close="enterpriseModalOpen = false"
+    >
+      <div v-if="submittedInquiry" class="space-y-4 text-xs">
+        <div class="p-4 border border-emerald-400/35 bg-emerald-500/10 text-emerald-200 space-y-1.5">
+          <div class="font-semibold text-sm text-emerald-300">Enterprise inquiry recorded</div>
+          <p class="leading-relaxed">
+            Your workspace upgrade request has been logged for review under reference ID
+            <code class="font-mono text-[#F5F5F3]">{{ submittedInquiry.id }}</code>.
+          </p>
+        </div>
+        <div class="flex justify-end">
+          <button type="button" @click="enterpriseModalOpen = false" class="btn-platinum px-4 py-2 text-xs">
+            Done
+          </button>
+        </div>
+      </div>
+
+      <form v-else id="billing-enterprise-form" @submit.prevent="handleSubmitEnterpriseInquiry" class="space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="space-y-1">
+            <label for="ent-company" class="text-[#D4D4D8] font-medium block">Company / Team</label>
+            <input
+              id="ent-company"
+              v-model.trim="enterpriseForm.company_name"
+              type="text"
+              required
+              class="input-glass w-full px-3 py-2 text-xs"
+            />
+          </div>
+          <div class="space-y-1">
+            <label for="ent-name" class="text-[#D4D4D8] font-medium block">Contact Name</label>
+            <input
+              id="ent-name"
+              v-model.trim="enterpriseForm.contact_name"
+              type="text"
+              required
+              class="input-glass w-full px-3 py-2 text-xs"
+            />
+          </div>
+          <div class="space-y-1">
+            <label for="ent-email" class="text-[#D4D4D8] font-medium block">Work Email</label>
+            <input
+              id="ent-email"
+              v-model.trim="enterpriseForm.contact_email"
+              type="email"
+              required
+              class="input-glass w-full px-3 py-2 text-xs"
+            />
+          </div>
+          <div class="space-y-1">
+            <label for="ent-size" class="text-[#D4D4D8] font-medium block">Team Size</label>
+            <select id="ent-size" v-model="enterpriseForm.team_size" class="input-glass w-full px-3 py-2 text-xs">
+              <option value="5-20">5-20 pentesters</option>
+              <option value="21-50">21-50 pentesters</option>
+              <option value="50+">50+ pentesters</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <label for="ent-reports" class="text-[#D4D4D8] font-medium block">
+            Estimated monthly reports (optional)
+          </label>
+          <input
+            id="ent-reports"
+            v-model.number="enterpriseForm.estimated_monthly_reports"
+            type="number"
+            min="1"
+            placeholder="e.g. 120"
+            class="input-glass w-full px-3 py-2 text-xs font-mono"
+          />
+        </div>
+
+        <div class="space-y-1">
+          <label for="ent-req" class="text-[#D4D4D8] font-medium block">
+            Deployment, batch limit &amp; SLA requirements
+          </label>
+          <textarea
+            id="ent-req"
+            v-model.trim="enterpriseForm.requirements"
+            rows="3"
+            required
+            minlength="5"
+            placeholder="Need unlimited monthly PDFs, 2,000+ findings per CLI batch, and custom VPC deployment..."
+            class="input-glass w-full p-3 text-xs"
+          ></textarea>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-1">
+          <button type="button" @click="enterpriseModalOpen = false" class="btn-glass px-4 py-2 text-xs">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            :disabled="submittingEnterprise"
+            class="btn-platinum px-4 py-2 text-xs disabled:opacity-50"
+          >
+            {{ submittingEnterprise ? 'Submitting...' : 'Submit Enterprise request' }}
+          </button>
+        </div>
+      </form>
+    </BaseModal>
   </AppLayout>
 </template>
 
@@ -418,7 +537,11 @@ import {
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
-import { api, type MidtransCheckoutResponse } from '@/services/api'
+import {
+  api,
+  type EnterpriseInquiryResponse,
+  type MidtransCheckoutResponse,
+} from '@/services/api'
 import { session } from '@/stores/session'
 import { toast } from '@/stores/toast'
 
@@ -428,20 +551,24 @@ const isManager = computed(() => session.activeRole.value === 'MANAGER')
 const currentTier = computed(() => sub.value?.tier || 'FREE')
 const usedReports = computed(() => sub.value?.reports_used_this_month ?? 0)
 const maxReports = computed(() => sub.value?.monthly_report_quota ?? 3)
+const isUnlimited = computed(() => Boolean(sub.value?.is_unlimited || maxReports.value < 0))
 const remainingReports = computed(
   () => sub.value?.remaining_reports ?? Math.max(0, maxReports.value - usedReports.value)
 )
 const quotaPct = computed(() =>
-  maxReports.value > 0 ? Math.min(100, (usedReports.value / maxReports.value) * 100) : 0
+  !isUnlimited.value && maxReports.value > 0
+    ? Math.min(100, (usedReports.value / maxReports.value) * 100)
+    : 0
 )
 const quotaBarClass = computed(() => {
+  if (isUnlimited.value) return 'bg-emerald-400'
   if (usedReports.value >= maxReports.value) return 'bg-red-500'
   if (quotaPct.value >= 80) return 'bg-amber-400'
   return 'bg-[#F5F5F3]'
 })
 const formattedResetDate = computed(() => {
   const raw = sub.value?.quota_reset_date
-  if (!raw) return '—'
+  if (!raw) return '-'
   const d = new Date(raw)
   return Number.isNaN(d.getTime())
     ? raw
@@ -452,6 +579,52 @@ const checkingOut = ref(false)
 const syncing = ref(false)
 const checkoutResult = ref<MidtransCheckoutResponse | null>(null)
 const snapModalOpen = ref(false)
+
+const enterpriseModalOpen = ref(false)
+const submittingEnterprise = ref(false)
+const submittedInquiry = ref<EnterpriseInquiryResponse | null>(null)
+const enterpriseForm = ref({
+  company_name: '',
+  contact_name: '',
+  contact_email: '',
+  team_size: '5-20',
+  estimated_monthly_reports: null as number | null,
+  requirements: '',
+})
+
+const openEnterpriseModal = () => {
+  submittedInquiry.value = null
+  enterpriseForm.value = {
+    company_name: session.state.activeWorkspace?.name || '',
+    contact_name: session.state.user?.full_name || '',
+    contact_email: session.state.user?.email || '',
+    team_size: '5-20',
+    estimated_monthly_reports: 100,
+    requirements: '',
+  }
+  enterpriseModalOpen.value = true
+}
+
+const handleSubmitEnterpriseInquiry = async () => {
+  const wId = session.state.activeWorkspaceId
+  if (!wId) return
+  submittingEnterprise.value = true
+  try {
+    submittedInquiry.value = await api.billing.submitEnterpriseInquiry(wId, {
+      company_name: enterpriseForm.value.company_name,
+      contact_name: enterpriseForm.value.contact_name,
+      contact_email: enterpriseForm.value.contact_email,
+      team_size: enterpriseForm.value.team_size,
+      estimated_monthly_reports: enterpriseForm.value.estimated_monthly_reports || null,
+      requirements: enterpriseForm.value.requirements,
+    })
+    toast.success('Enterprise inquiry submitted.')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Unable to submit Enterprise inquiry.')
+  } finally {
+    submittingEnterprise.value = false
+  }
+}
 
 onMounted(() => {
   void session.refreshSubscription()

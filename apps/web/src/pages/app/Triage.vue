@@ -947,6 +947,9 @@ const initialStatus =
 
 const severityFilter = ref<Severity | ''>(initialSeverity)
 const statusFilter = ref<FindingStatus | ''>(initialStatus)
+const pendingQueryFindingId = ref(
+  typeof route.query.finding === 'string' ? route.query.finding : ''
+)
 const quarantineFilter = ref<'ALL' | 'IN_SCOPE' | 'QUARANTINED'>('ALL')
 const searchInput = ref('')
 const debouncedSearch = ref('')
@@ -1063,6 +1066,14 @@ async function fetchFindings(): Promise<void> {
       drawerFinding.value =
         res.items.find((i) => i.id === drawerFinding.value?.id) ?? drawerFinding.value
     }
+    if (pendingQueryFindingId.value) {
+      const targetId = pendingQueryFindingId.value
+      pendingQueryFindingId.value = ''
+      const matched = res.items.find((i) => i.id === targetId)
+      if (matched) {
+        void openFindingDrawer(matched)
+      }
+    }
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Unable to load project findings.')
   } finally {
@@ -1140,6 +1151,7 @@ const handleBulkCurate = async (curated: boolean) => {
     )
     selectedIds.value = []
     await fetchFindings()
+    void session.refreshProjectProgress()
   } finally {
     bulkBusy.value = false
   }
@@ -1171,6 +1183,7 @@ const handleBulkStatusChange = async (event: Event) => {
     }
     selectedIds.value = []
     await fetchFindings()
+    void session.refreshProjectProgress()
   } finally {
     bulkBusy.value = false
   }
@@ -1190,6 +1203,7 @@ const handleStatusChange = async (f: Finding, event: Event) => {
     f.is_curated_for_report = updated.is_curated_for_report
     toast.success('Finding status updated.')
     await fetchFindings()
+    void session.refreshProjectProgress()
   } catch (err: unknown) {
     selectEl.value = f.status
     if (err instanceof ApiError && err.status === 409) {
@@ -1214,6 +1228,7 @@ const toggleCuration = async (f: Finding, event: Event) => {
     })
     f.is_curated_for_report = updated.is_curated_for_report
     await fetchFindings()
+    void session.refreshProjectProgress()
   } catch (err: unknown) {
     checkbox.checked = f.is_curated_for_report
     toast.error(err instanceof Error ? err.message : 'Unable to update report selection.')
@@ -1239,6 +1254,7 @@ const confirmUnquarantine = async () => {
     unquarantineTarget.value = null
     toast.success('Finding approved into scope and selected for the report.')
     await fetchFindings()
+    void session.refreshProjectProgress()
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Unable to approve finding into scope.')
   } finally {
@@ -1269,6 +1285,20 @@ const closeFindingDrawer = () => {
   drawerFinding.value = null
   pocData.value = null
 }
+
+watch(
+  () => route.query.finding,
+  (val) => {
+    if (typeof val === 'string' && val) {
+      pendingQueryFindingId.value = val
+      const matched = findings.value.find((i) => i.id === val)
+      if (matched) {
+        pendingQueryFindingId.value = ''
+        void openFindingDrawer(matched)
+      }
+    }
+  }
+)
 
 const onDrawerEscape = (e: KeyboardEvent) => {
   if (e.key === 'Escape' && drawerFinding.value && !lightboxUrl.value && !unquarantineTarget.value) {
@@ -1380,6 +1410,7 @@ const handleCreateManual = async () => {
       toast.success(`Finding saved (CVSS ${res.cvss_score}).`)
     }
     await fetchFindings()
+    void session.refreshProjectProgress()
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Unable to save manual finding.')
   } finally {

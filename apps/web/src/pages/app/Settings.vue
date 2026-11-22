@@ -43,7 +43,7 @@
 
       <!-- TAB 1: WORKSPACE & TEAM -->
       <div v-if="activeTab === 'team'" role="tabpanel" class="space-y-6">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 border border-white/[0.11] divide-y lg:divide-y-0 lg:divide-x divide-white/[0.11] bg-[#08080B]">
+        <div class="grid grid-cols-1 md:grid-cols-2 border border-white/[0.11] divide-y md:divide-y-0 md:divide-x divide-white/[0.11] bg-[#08080B]">
           <!-- Rename Active Workspace (MANAGER) -->
           <div
             v-if="isManager && session.state.activeWorkspace"
@@ -70,31 +70,8 @@
             </form>
           </div>
 
-          <!-- Create Workspace -->
-          <div class="p-5 space-y-3">
-            <h2 class="text-sm font-display font-semibold text-[#F5F5F3]">Create workspace (Max 5)</h2>
-            <form @submit.prevent="handleCreateWorkspace" class="flex gap-2">
-              <label for="ws-create-input" class="sr-only">New workspace name</label>
-              <input
-                id="ws-create-input"
-                v-model.trim="newWorkspaceName"
-                type="text"
-                required
-                placeholder="New team or company..."
-                class="input-glass flex-1 min-w-0 px-3 py-2 text-xs"
-              />
-              <button
-                type="submit"
-                :disabled="creatingWs"
-                class="btn-platinum px-4 py-2 text-xs disabled:opacity-50"
-              >
-                {{ creatingWs ? '...' : 'Create' }}
-              </button>
-            </form>
-          </div>
-
           <!-- Accept Invitation Token -->
-          <div class="p-5 space-y-3">
+          <div :class="['p-5 space-y-3', !(isManager && session.state.activeWorkspace) ? 'md:col-span-2' : '']">
             <h2 class="text-sm font-display font-semibold text-[#F5F5F3]">Join via invitation token</h2>
             <form @submit.prevent="handleAcceptInvitation" class="flex gap-2">
               <label for="ws-invite-token" class="sr-only">Invitation token</label>
@@ -706,8 +683,6 @@ const formatRole = (role: string): string => {
 // Team & Workspace
 const renameWorkspaceInput = ref('')
 const renamingWs = ref(false)
-const newWorkspaceName = ref('')
-const creatingWs = ref(false)
 const acceptTokenInput = ref('')
 const acceptingInvite = ref(false)
 const loadingTeam = ref(false)
@@ -833,21 +808,6 @@ const handleRenameWorkspace = async () => {
     toast.error(err instanceof Error ? err.message : 'Unable to rename workspace.')
   } finally {
     renamingWs.value = false
-  }
-}
-
-const handleCreateWorkspace = async () => {
-  creatingWs.value = true
-  try {
-    const created = await api.workspaces.create(newWorkspaceName.value)
-    newWorkspaceName.value = ''
-    await session.hydrate(true)
-    await session.switchWorkspace(created.id)
-    toast.success(`Workspace '${created.name}' created and activated.`)
-  } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'Unable to create workspace.')
-  } finally {
-    creatingWs.value = false
   }
 }
 

@@ -1,5 +1,5 @@
 <template>
-  <AppLayout>
+  <AppLayout :show-pipeline="true">
     <template #header-title>
       <div class="flex items-center gap-3 min-w-0">
         <div class="min-w-0">
@@ -22,8 +22,6 @@
     </template>
 
     <div class="space-y-6 max-w-7xl mx-auto">
-      <PipelineStepper @open-cli="cliDrawerOpen = true" />
-
       <!-- Empty State when no project -->
       <EmptyState
         v-if="!activeProject"
@@ -91,7 +89,7 @@
           <div class="p-5 space-y-2">
             <div class="flex items-center justify-between">
               <span class="font-mono text-[10px] uppercase tracking-wider text-[#8A8D96]">Report Draft</span>
-              <Sparkles class="h-4 w-4 text-[#F5F5F3]" aria-hidden="true" />
+              <FileText class="h-4 w-4 text-[#F5F5F3]" aria-hidden="true" />
             </div>
             <div class="text-2xl sm:text-3xl font-display font-bold text-[#F5F5F3]">
               {{ formatDraftStatus(latestNarrative?.approval_status) }}
@@ -191,14 +189,14 @@
               title="No findings yet"
               description="Import scan results with the CLI or add findings manually to get started."
               action-label="Open import guide"
-              @action="cliDrawerOpen = true"
+              @action="openCliDrawer()"
             />
 
             <div v-else class="divide-y divide-white/[0.08] border-y border-white/[0.08] text-xs">
               <router-link
                 v-for="f in recentFindings.slice(0, 5)"
                 :key="f.id"
-                :to="{ path: '/app/triage', query: { severity: f.severity } }"
+                :to="{ path: '/app/triage', query: { finding: f.id } }"
                 class="block py-3 hover:bg-white/[0.03] px-2 -mx-2 transition-colors space-y-1.5"
               >
                 <div class="flex justify-between items-center gap-2">
@@ -251,30 +249,26 @@
         </div>
       </template>
     </div>
-
-    <CliIngestDrawer :open="cliDrawerOpen" @close="cliDrawerOpen = false" />
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
 import {
   Activity,
   AlertTriangle,
   BarChart3,
   BookmarkCheck,
   FileDown,
+  FileText,
   FolderPlus,
   ListChecks,
   Loader2,
   ShieldCheck,
-  Sparkles,
   Terminal,
 } from 'lucide-vue-next'
 import AppLayout from '@/components/layout/AppLayout.vue'
-import CliIngestDrawer from '@/components/ui/CliIngestDrawer.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
-import PipelineStepper from '@/components/ui/PipelineStepper.vue'
 import SeverityBadge from '@/components/ui/SeverityBadge.vue'
 import SkeletonBlock from '@/components/ui/SkeletonBlock.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
@@ -286,15 +280,15 @@ import {
   type FindingSummaryMetrics,
   type ReportSummary,
 } from '@/services/api'
-import { session } from '@/stores/session'
+import { OPEN_CLI_DRAWER_KEY, session } from '@/stores/session'
 import { toast } from '@/stores/toast'
 import { getSeverityStyle } from '@/utils/cvss'
 
 const activeProject = session.activeProject
+const openCliDrawer = inject(OPEN_CLI_DRAWER_KEY, () => {})
 
 const loading = ref(false)
 const hasLoadedOnce = ref(false)
-const cliDrawerOpen = ref(false)
 const summary = ref<FindingSummaryMetrics>({
   total: 0,
   curated: 0,

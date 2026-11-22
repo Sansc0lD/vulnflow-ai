@@ -82,8 +82,17 @@
             </option>
           </select>
           <div v-else class="text-xs text-amber-300 font-medium">
-            No workspace selected — create one in Settings.
+            No workspace selected yet.
           </div>
+
+          <button
+            type="button"
+            @click="openCreateWorkspaceModal"
+            class="w-full flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-[11px] font-medium border border-white/[0.12] text-[#D4D4D8] hover:text-[#F5F5F3] hover:bg-white/[0.04] transition-colors"
+          >
+            <Plus class="h-3.5 w-3.5" aria-hidden="true" />
+            <span>New workspace</span>
+          </button>
         </div>
 
         <!-- Grouped Navigation -->
@@ -119,6 +128,20 @@
               >
                 <Users class="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span>Users</span>
+              </router-link>
+
+              <router-link
+                :to="{ path: '/app/admin', query: { tab: 'workspaces' } }"
+                @click="mobileNavOpen = false"
+                :class="[
+                  'flex items-center gap-2.5 px-3 py-2 border-l-2 transition-colors',
+                  route.path === '/app/admin' && route.query.tab === 'workspaces'
+                    ? 'border-[#F5F5F3] bg-white/[0.06] text-[#F5F5F3] font-semibold'
+                    : 'border-transparent text-[#8A8D96] hover:text-[#F5F5F3] hover:bg-white/[0.03]',
+                ]"
+              >
+                <Building2 class="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span>Workspaces &amp; Plans</span>
               </router-link>
 
               <router-link
@@ -180,16 +203,24 @@
 
             <div class="space-y-0.5">
               <div class="px-3 pb-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#8A8D96]">
-                Reporting
+                Active Project
               </div>
               <router-link
                 to="/app/triage"
                 @click="mobileNavOpen = false"
-                class="flex items-center gap-2.5 px-3 py-2 border-l-2 border-transparent text-[#8A8D96] hover:text-[#F5F5F3] hover:bg-white/[0.03] transition-colors"
+                class="flex items-center justify-between gap-2 px-3 py-2 border-l-2 border-transparent text-[#8A8D96] hover:text-[#F5F5F3] hover:bg-white/[0.03] transition-colors"
                 active-class="!border-[#F5F5F3] !bg-white/[0.06] !text-[#F5F5F3] font-semibold"
               >
-                <CheckSquare class="h-4 w-4 shrink-0" aria-hidden="true" />
-                <span>Findings</span>
+                <span class="flex items-center gap-2.5 min-w-0">
+                  <CheckSquare class="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>Findings</span>
+                </span>
+                <span
+                  v-if="projectProgress.loaded && projectProgress.totalFindings > 0"
+                  class="font-mono text-[10px] tabular-nums px-1.5 py-0.5 border border-white/[0.14] text-[#D4D4D8]"
+                >
+                  {{ projectProgress.totalFindings }}
+                </span>
               </router-link>
 
               <router-link
@@ -198,7 +229,7 @@
                 class="flex items-center gap-2.5 px-3 py-2 border-l-2 border-transparent text-[#8A8D96] hover:text-[#F5F5F3] hover:bg-white/[0.03] transition-colors"
                 active-class="!border-[#F5F5F3] !bg-white/[0.06] !text-[#F5F5F3] font-semibold"
               >
-                <Sparkles class="h-4 w-4 shrink-0" aria-hidden="true" />
+                <FileText class="h-4 w-4 shrink-0" aria-hidden="true" />
                 <span>Report Draft</span>
               </router-link>
 
@@ -246,7 +277,7 @@
         <div class="flex items-center justify-between p-2.5 border border-white/[0.1] bg-[#050507]">
           <div class="truncate mr-2">
             <span class="text-xs font-semibold text-[#F5F5F3] truncate block">
-              {{ currentUser?.full_name || currentUser?.email || '—' }}
+              {{ currentUser?.full_name || currentUser?.email || 'Account' }}
             </span>
             <div class="flex items-center gap-1.5 mt-0.5">
               <span class="text-[11px] font-mono text-[#8A8D96]">
@@ -309,12 +340,21 @@
             </select>
           </div>
 
+          <router-link
+            v-else-if="!isSuperadmin && !activeProject"
+            to="/app/projects"
+            class="hidden sm:inline-flex items-center px-2 py-1.5 text-xs text-[#8A8D96] hover:text-[#F5F5F3] underline underline-offset-4 transition-colors"
+          >
+            No project selected
+          </router-link>
+
           <button
             v-if="!isSuperadmin"
             type="button"
-            @click="cliDrawerOpen = true"
-            class="btn-glass px-3 py-1.5 text-xs"
-            title="Import Scan Results via CLI"
+            :disabled="!activeProject"
+            @click="openCliDrawer()"
+            class="btn-glass px-3 py-1.5 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+            :title="activeProject ? 'Import Scan Results via CLI' : 'Select or create a project first'"
             aria-label="Import Scan Results via CLI"
           >
             <Terminal class="h-3.5 w-3.5" aria-hidden="true" />
@@ -352,53 +392,151 @@
         </select>
       </div>
 
+      <!-- Connection Error Banner (preserves session on transient API/network failures) -->
+      <div
+        v-if="connectionError"
+        role="alert"
+        class="border-b border-amber-400/35 bg-amber-500/10 px-4 sm:px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-200 shrink-0"
+      >
+        <span>{{ connectionError }}</span>
+        <button
+          type="button"
+          :disabled="retryingConnection"
+          @click="handleRetryConnection"
+          class="btn-glass px-3 py-1 text-xs border-amber-400/40 text-amber-100 hover:bg-amber-500/20 disabled:opacity-50"
+        >
+          {{ retryingConnection ? 'Retrying...' : 'Retry connection' }}
+        </button>
+      </div>
+
       <!-- Scrollable Main -->
       <main id="app-main" class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
-        <div v-if="!isSuperadmin && pipelineStep > 0" class="max-w-7xl mx-auto">
-          <PipelineStepper :active-step="pipelineStep" @open-cli="cliDrawerOpen = true" />
+        <div
+          v-if="!isSuperadmin && Boolean(activeProject) && (pipelineStep > 0 || showPipeline)"
+          class="max-w-7xl mx-auto"
+        >
+          <PipelineStepper :active-step="pipelineStep" @open-cli="openCliDrawer()" />
         </div>
         <slot />
       </main>
     </div>
 
-    <CliIngestDrawer v-if="!isSuperadmin" :open="cliDrawerOpen" @close="cliDrawerOpen = false" />
+    <CliIngestDrawer
+      v-if="!isSuperadmin"
+      :open="cliDrawerOpen"
+      :project-id="cliDrawerProjectId"
+      @close="closeCliDrawer"
+    />
+
+    <BaseModal
+      v-if="!isSuperadmin"
+      :open="createWsModalOpen"
+      title="Create Personal Workspace"
+      subtitle="Start an isolated Free-tier workspace owned by your account (maximum 1 personal Free workspace per user)."
+      max-width="md"
+      @close="createWsModalOpen = false"
+    >
+      <form id="create-ws-modal-form" @submit.prevent="handleCreateWorkspace" class="space-y-4">
+        <div
+          v-if="ownsFreeWorkspace"
+          class="p-3.5 border border-amber-400/35 bg-amber-500/10 text-xs text-amber-200 space-y-2 leading-relaxed"
+        >
+          <p>
+            You already own a Free-tier workspace. Upgrade an existing workspace to Pro or Enterprise before creating another Free workspace.
+          </p>
+          <router-link
+            to="/app/billing"
+            @click="createWsModalOpen = false"
+            class="inline-block font-semibold underline underline-offset-4 text-[#F5F5F3]"
+          >
+            Go to Billing &amp; Plans
+          </router-link>
+        </div>
+
+        <div
+          v-else
+          class="p-3 border border-white/[0.1] bg-[#050507] text-xs text-[#8A8D96] leading-relaxed"
+        >
+          Your new workspace starts on the <strong class="text-[#F5F5F3]">Free</strong> plan and is completely isolated from existing workspaces. Your role in other workspaces remains unchanged.
+        </div>
+
+        <div class="space-y-1.5">
+          <label for="switcher-new-ws-name" class="text-xs font-medium text-[#D4D4D8] block">
+            Workspace name
+          </label>
+          <input
+            id="switcher-new-ws-name"
+            v-model.trim="newWorkspaceName"
+            type="text"
+            required
+            :disabled="ownsFreeWorkspace || creatingWs"
+            placeholder="e.g. Personal Lab or Client Assessment"
+            class="w-full input-glass px-3 py-2 text-xs disabled:opacity-50"
+          />
+        </div>
+      </form>
+
+      <template #footer>
+        <button
+          type="button"
+          @click="createWsModalOpen = false"
+          class="btn-glass px-4 py-2 text-xs"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          form="create-ws-modal-form"
+          :disabled="ownsFreeWorkspace || creatingWs || !newWorkspaceName"
+          class="btn-platinum px-4 py-2 text-xs disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {{ creatingWs ? 'Creating...' : 'Create workspace' }}
+        </button>
+      </template>
+    </BaseModal>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, provide, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   BarChart3,
+  Building2,
   CheckSquare,
   CreditCard,
   ExternalLink,
+  FileText,
   FolderGit2,
   LayoutDashboard,
   LogOut,
   Menu,
   Palette,
+  Plus,
   ScrollText,
   Settings,
   ShieldCheck,
-  Sparkles,
   Terminal,
   Users,
   X,
 } from 'lucide-vue-next'
 import AmbientCanvas from '@/components/ui/AmbientCanvas.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
 import BrandLogo from '@/components/ui/BrandLogo.vue'
 import CliIngestDrawer from '@/components/ui/CliIngestDrawer.vue'
 import PipelineStepper from '@/components/ui/PipelineStepper.vue'
-import { session } from '@/stores/session'
+import { api } from '@/services/api'
+import { OPEN_CLI_DRAWER_KEY, session } from '@/stores/session'
 import { toast } from '@/stores/toast'
 
 withDefaults(
   defineProps<{
     pipelineStep?: number
+    showPipeline?: boolean
   }>(),
   {
     pipelineStep: 0,
+    showPipeline: false,
   }
 )
 
@@ -406,6 +544,29 @@ const route = useRoute()
 const router = useRouter()
 const mobileNavOpen = ref(false)
 const cliDrawerOpen = ref(false)
+const cliDrawerProjectId = ref<string | null>(null)
+const createWsModalOpen = ref(false)
+const newWorkspaceName = ref('')
+const creatingWs = ref(false)
+const retryingConnection = ref(false)
+
+const openCreateWorkspaceModal = () => {
+  newWorkspaceName.value = ''
+  createWsModalOpen.value = true
+  mobileNavOpen.value = false
+}
+
+const openCliDrawer = (projectId?: string | null) => {
+  cliDrawerProjectId.value = projectId ?? null
+  cliDrawerOpen.value = true
+}
+
+const closeCliDrawer = () => {
+  cliDrawerOpen.value = false
+  cliDrawerProjectId.value = null
+}
+
+provide(OPEN_CLI_DRAWER_KEY, openCliDrawer)
 
 const currentUser = computed(() => session.state.user)
 const isSuperadmin = computed(() => Boolean(currentUser.value?.is_superadmin))
@@ -414,7 +575,11 @@ const activeWorkspaceId = computed(() => session.state.activeWorkspaceId)
 const subscription = computed(() => session.state.subscription)
 const projects = computed(() => session.state.projects)
 const activeProjectId = computed(() => session.state.activeProjectId)
+const activeProject = session.activeProject
+const projectProgress = computed(() => session.state.projectProgress)
 const activeRole = session.activeRole
+const ownsFreeWorkspace = session.ownsFreeWorkspace
+const connectionError = computed(() => session.state.connectionError)
 
 const tierLabel = computed(() => {
   const tier = subscription.value?.tier
@@ -448,11 +613,45 @@ const onKeydown = (e: KeyboardEvent) => {
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
   if (!session.state.initialized) {
-    session.hydrate().catch(() => {
-      router.push('/app/login')
+    session.hydrate().catch((err: unknown) => {
+      if (err && typeof err === 'object' && 'status' in err) {
+        const status = (err as { status: number }).status
+        if (status === 401 || status === 403) {
+          void router.push({ path: '/app/login', query: { reason: 'session_expired' } })
+        }
+      }
     })
   }
 })
+
+const handleRetryConnection = async () => {
+  retryingConnection.value = true
+  try {
+    await session.retryConnection()
+    toast.success('API connection restored.')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Still unable to reach the API server.')
+  } finally {
+    retryingConnection.value = false
+  }
+}
+
+const handleCreateWorkspace = async () => {
+  if (!newWorkspaceName.value || ownsFreeWorkspace.value) return
+  creatingWs.value = true
+  try {
+    const created = await api.workspaces.create(newWorkspaceName.value)
+    newWorkspaceName.value = ''
+    createWsModalOpen.value = false
+    await session.hydrate(true)
+    await session.switchWorkspace(created.id)
+    toast.success(`Workspace '${created.name}' created and activated.`)
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Unable to create workspace.')
+  } finally {
+    creatingWs.value = false
+  }
+}
 
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown)

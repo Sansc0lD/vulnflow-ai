@@ -8,6 +8,14 @@
     </div>
 
     <div
+      v-if="sessionExpiredBanner"
+      role="status"
+      class="p-3.5 bg-amber-500/10 border border-amber-400/35 text-amber-200 text-xs leading-relaxed"
+    >
+      Your session expired or was revoked. Please sign in again.
+    </div>
+
+    <div
       v-if="errorMessage"
       role="alert"
       class="p-3.5 bg-red-500/10 border border-red-400/35 text-red-200 text-xs leading-relaxed"
@@ -113,7 +121,7 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Eye, EyeOff, KeyRound, Loader2 } from 'lucide-vue-next'
 import AuthShell from '@/components/layout/AuthShell.vue'
@@ -123,6 +131,8 @@ import { toast } from '@/stores/toast'
 
 const router = useRouter()
 const route = useRoute()
+
+const sessionExpiredBanner = computed(() => route.query.reason === 'session_expired')
 
 const email = ref('')
 const password = ref('')

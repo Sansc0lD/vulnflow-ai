@@ -52,6 +52,7 @@ export interface WorkspaceMembership {
   id: string
   name: string
   role: WorkspaceRole
+  tier?: string | null
 }
 
 export interface RegisterResponse {
@@ -142,6 +143,35 @@ export interface PaginatedAuditLogs {
   offset: number
 }
 
+export interface ProjectTechStack {
+  language?:
+    | 'python'
+    | 'typescript'
+    | 'javascript'
+    | 'go'
+    | 'java'
+    | 'php'
+    | 'csharp'
+    | 'ruby'
+    | 'other'
+    | null
+  framework?:
+    | 'fastapi'
+    | 'django'
+    | 'flask'
+    | 'express'
+    | 'nestjs'
+    | 'nextjs'
+    | 'laravel'
+    | 'spring_boot'
+    | 'aspnet'
+    | 'rails'
+    | 'gin'
+    | 'other'
+    | null
+  database?: 'postgresql' | 'mysql' | 'mongodb' | 'mssql' | 'sqlite' | 'redis' | 'other' | null
+}
+
 export interface Project {
   id: string
   workspace_id: string
@@ -153,6 +183,7 @@ export interface Project {
   timezone: string
   status: 'ACTIVE' | 'ARCHIVED'
   lead_pentester_id?: string | null
+  tech_stack?: ProjectTechStack | null
 }
 
 export interface ProjectCreatePayload {
@@ -162,6 +193,7 @@ export interface ProjectCreatePayload {
   roe_start_date: string
   roe_end_date: string
   timezone?: string
+  tech_stack?: ProjectTechStack | null
 }
 
 export interface ProjectUpdatePayload {
@@ -172,6 +204,7 @@ export interface ProjectUpdatePayload {
   roe_end_date?: string
   timezone?: string
   status?: 'ACTIVE' | 'ARCHIVED'
+  tech_stack?: ProjectTechStack | null
 }
 
 export interface Finding {
@@ -282,11 +315,33 @@ export interface AINarrativeResponse {
   is_fallback: boolean
 }
 
+export interface AINarrativeAcceptedResponse {
+  job_id: string
+  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  message: string
+  status_url: string
+}
+
+export interface AINarrativeJobStatusResponse {
+  job_id: string
+  status: 'QUEUED' | 'PROCESSING' | 'COMPLETED' | 'FAILED'
+  progress_percentage?: number | null
+  stage?: string | null
+  narrative_id?: string | null
+  narrative?: AINarrativeResponse | null
+  error_message?: string | null
+}
+
 export interface ThemeOptionsPayload {
   primary_color: string
   secondary_color: string
   show_cover_page?: boolean
   show_cvss_radar?: boolean
+  show_toc?: boolean
+  show_methodology?: boolean
+  show_poc_attachments?: boolean
+  report_language?: 'en' | 'id'
+  methodology_framework?: string
   confidentiality_notice?: string
 }
 
@@ -296,8 +351,24 @@ export interface ReportSummary {
   report_title: string
   version: string
   watermark_applied: boolean
+  verification_code?: string | null
+  sha256_hash?: string | null
+  is_rasterized?: boolean
+  is_signed?: boolean
   generated_at: string
   download_url: string
+}
+
+export interface PublicReportVerifyResponse {
+  valid: boolean
+  verification_code: string
+  report_version?: string | null
+  agency_name?: string | null
+  generated_at?: string | null
+  watermark_applied: boolean
+  is_rasterized: boolean
+  is_signed: boolean
+  sha256_hash?: string | null
 }
 
 export interface CompilePDFAcceptedResponse {
@@ -327,12 +398,63 @@ export interface SubscriptionStatus {
   tier: 'FREE' | 'PRO' | 'ENTERPRISE' | string
   status: string
   monthly_report_quota: number
+  is_unlimited?: boolean
+  custom_batch_limit?: number | null
   reports_used_this_month: number
   remaining_reports: number
   quota_reset_date: string
   payment_status: string
   payment_type?: string | null
   midtrans_order_id?: string | null
+}
+
+export type EnterpriseInquiryStatus = 'NEW' | 'CONTACTED' | 'PROVISIONED' | 'DECLINED'
+
+export interface EnterpriseInquiryCreatePayload {
+  company_name: string
+  contact_name: string
+  contact_email: string
+  team_size: string
+  estimated_monthly_reports?: number | null
+  requirements: string
+}
+
+export interface EnterpriseInquiryResponse {
+  id: string
+  workspace_id?: string | null
+  submitted_by_user_id?: string | null
+  company_name: string
+  contact_name: string
+  contact_email: string
+  team_size: string
+  estimated_monthly_reports?: number | null
+  requirements: string
+  status: EnterpriseInquiryStatus
+  admin_notes?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface AdminWorkspaceSubscriptionSummary {
+  workspace_id: string
+  workspace_name: string
+  tier: string
+  status: string
+  monthly_report_quota: number
+  is_unlimited: boolean
+  reports_used_this_month: number
+  custom_batch_limit?: number | null
+  quota_reset_date: string
+  payment_status: string
+  manager_emails: string[]
+  created_at: string
+}
+
+export interface AdminSubscriptionOverridePayload {
+  tier: 'FREE' | 'PRO' | 'ENTERPRISE'
+  monthly_report_quota: number
+  custom_batch_limit?: number | null
+  reason: string
 }
 
 export interface MidtransCheckoutResponse {
@@ -448,6 +570,16 @@ const PUBLIC_AUTH_PATHS = new Set([
   '/auth/reset-password',
 ])
 
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000
+const RETRYABLE_GATEWAY_STATUSES = new Set([502, 503, 504])
+let isRedirectingToLogin = false
+
+function delayMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms)
+  })
+}
+
 function buildQuery(params: Record<string, string | number | boolean | undefined | null>): string {
   const sp = new URLSearchParams()
   for (const [key, val] of Object.entries(params)) {
@@ -459,10 +591,39 @@ function buildQuery(params: Record<string, string | number | boolean | undefined
   return qs ? `?${qs}` : ''
 }
 
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number
+): Promise<Response> {
+  const controller = new AbortController()
+  const externalSignal = options.signal
+  const onExternalAbort = () => controller.abort()
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort()
+    } else {
+      externalSignal.addEventListener('abort', onExternalAbort, { once: true })
+    }
+  }
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    })
+  } finally {
+    window.clearTimeout(timer)
+    if (externalSignal) {
+      externalSignal.removeEventListener('abort', onExternalAbort)
+    }
+  }
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {},
-  config: { skipAuthRedirect?: boolean } = {}
+  config: { skipAuthRedirect?: boolean; timeoutMs?: number } = {}
 ): Promise<T> {
   const token = authStorage.getToken()
   const headers = new Headers(options.headers || {})
@@ -473,13 +634,39 @@ async function request<T>(
     headers.set('Authorization', `Bearer ${token}`)
   }
 
-  let response: Response
-  try {
-    response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      ...options,
-      headers,
-    })
-  } catch {
+  const method = (options.method || 'GET').toUpperCase()
+  const timeoutMs = config.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+  const maxAttempts = method === 'GET' ? 2 : 1
+
+  let response: Response | null = null
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const res = await fetchWithTimeout(`${API_BASE_URL}${endpoint}`, { ...options, headers }, timeoutMs)
+      if (RETRYABLE_GATEWAY_STATUSES.has(res.status) && attempt + 1 < maxAttempts) {
+        await delayMs(400)
+        continue
+      }
+      response = res
+      break
+    } catch (err) {
+      if (attempt + 1 < maxAttempts) {
+        await delayMs(400)
+        continue
+      }
+      const isTimeout = err instanceof DOMException && err.name === 'AbortError'
+      throw new ApiError(
+        isTimeout
+          ? 'API request timed out. Please retry.'
+          : 'Unable to reach the VulnFlow API server.',
+        {
+          status: 0,
+          code: 'NETWORK_ERROR',
+        }
+      )
+    }
+  }
+
+  if (!response) {
     throw new ApiError('Unable to reach the VulnFlow API server.', {
       status: 0,
       code: 'NETWORK_ERROR',
@@ -503,8 +690,13 @@ async function request<T>(
       code !== 'MFA_REQUIRED'
     ) {
       authStorage.clear()
-      if (window.location.pathname.startsWith('/app') && !window.location.pathname.startsWith('/app/login')) {
-        window.location.href = `/app/login?redirect=${encodeURIComponent(window.location.pathname)}`
+      if (
+        !isRedirectingToLogin &&
+        window.location.pathname.startsWith('/app') &&
+        !window.location.pathname.startsWith('/app/login')
+      ) {
+        isRedirectingToLogin = true
+        window.location.href = `/app/login?reason=session_expired&redirect=${encodeURIComponent(window.location.pathname)}`
       }
     }
 
@@ -780,6 +972,27 @@ export const api = {
           body: JSON.stringify(payload),
         }
       ),
+    generateNarrativeAsync: (
+      workspaceId: string,
+      projectId: string,
+      payload: {
+        tone?: string
+        language: 'id' | 'en'
+        sections_requested: string[]
+        finding_ids: string[]
+      }
+    ) =>
+      request<AINarrativeAcceptedResponse>(
+        `/workspaces/${workspaceId}/projects/${projectId}/reports/ai-narratives/async`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      ),
+    getJobStatus: (workspaceId: string, projectId: string, jobId: string) =>
+      request<AINarrativeJobStatusResponse>(
+        `/workspaces/${workspaceId}/projects/${projectId}/reports/ai-narratives/jobs/${jobId}`
+      ),
     updateNarrative: (
       workspaceId: string,
       projectId: string,
@@ -839,6 +1052,32 @@ export const api = {
       request<SubscriptionStatus>(`/workspaces/${workspaceId}/billing/sync`, {
         method: 'POST',
       }),
+    submitEnterpriseInquiry: (workspaceId: string, payload: EnterpriseInquiryCreatePayload) =>
+      request<EnterpriseInquiryResponse>(
+        `/workspaces/${workspaceId}/billing/enterprise-inquiry`,
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        }
+      ),
+  },
+
+  public: {
+    verifyReport: (verificationCode: string) =>
+      request<PublicReportVerifyResponse>(
+        `/public/verify/${encodeURIComponent(verificationCode)}`,
+        {},
+        { skipAuthRedirect: true }
+      ),
+    submitEnterpriseInquiry: (payload: EnterpriseInquiryCreatePayload) =>
+      request<EnterpriseInquiryResponse>(
+        '/public/enterprise-inquiries',
+        {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        },
+        { skipAuthRedirect: true }
+      ),
   },
 
   admin: {
@@ -862,5 +1101,25 @@ export const api = {
     listAuditLogs: (
       params: { workspace_id?: string; action?: string; limit?: number; offset?: number } = {}
     ) => request<PaginatedAuditLogs>(`/admin/audit-logs${buildQuery(params)}`),
+    listWorkspaces: (params: { tier?: string; limit?: number; offset?: number } = {}) =>
+      request<AdminWorkspaceSubscriptionSummary[]>(`/admin/workspaces${buildQuery(params)}`),
+    overrideWorkspaceSubscription: (
+      workspaceId: string,
+      payload: AdminSubscriptionOverridePayload
+    ) =>
+      request<AdminWorkspaceSubscriptionSummary>(`/admin/workspaces/${workspaceId}/subscription`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    listEnterpriseInquiries: (params: { status?: string; limit?: number; offset?: number } = {}) =>
+      request<EnterpriseInquiryResponse[]>(`/admin/enterprise-inquiries${buildQuery(params)}`),
+    updateEnterpriseInquiry: (
+      inquiryId: string,
+      payload: { status: EnterpriseInquiryStatus; admin_notes?: string | null }
+    ) =>
+      request<EnterpriseInquiryResponse>(`/admin/enterprise-inquiries/${inquiryId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
   },
 }

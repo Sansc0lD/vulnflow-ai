@@ -66,6 +66,18 @@
               View-only: only Workspace Managers can change branding settings.
             </div>
 
+            <div
+              v-if="!isProTier"
+              class="p-3 bg-[#050507] border border-white/[0.14] text-xs text-[#D4D4D8] space-y-1.5"
+            >
+              <div class="font-mono text-[10px] uppercase tracking-wider text-amber-300 font-semibold">
+                Free Tier Default Branding
+              </div>
+              <p class="text-xs text-[#8A8D96] leading-relaxed">
+                Free-tier PDF exports use default VulnFlow cover styling (#0F172A / #3B82F6) with a preview watermark. Custom brand colors, agency logo, and confidentiality notice activate on Pro and Enterprise plans.
+              </p>
+            </div>
+
             <!-- Logo Upload -->
             <div class="space-y-2">
               <span class="text-xs font-medium text-[#D4D4D8] block">
@@ -327,6 +339,53 @@
                   />
                   <span>Include CVSS risk radar chart</span>
                 </label>
+
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    v-model="showToc"
+                    type="checkbox"
+                    class="bg-[#050507] border-white/30 text-[#F5F5F3]"
+                  />
+                  <span>Include Table of Contents &amp; Document Control</span>
+                </label>
+
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    v-model="showMethodology"
+                    type="checkbox"
+                    class="bg-[#050507] border-white/30 text-[#F5F5F3]"
+                  />
+                  <span>Include Scope, Methodology &amp; SLA Matrix</span>
+                </label>
+
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input
+                    v-model="showPocAttachments"
+                    type="checkbox"
+                    class="bg-[#050507] border-white/30 text-[#F5F5F3]"
+                  />
+                  <span>Embed uploaded PoC screenshots</span>
+                </label>
+
+                <div class="grid grid-cols-2 gap-2.5 pt-1">
+                  <div class="space-y-1">
+                    <label for="pdf-lang" class="text-[11px] text-[#8A8D96] block">PDF Section Language</label>
+                    <select id="pdf-lang" v-model="reportLanguage" class="input-glass w-full px-2.5 py-1.5 text-xs">
+                      <option value="en">English</option>
+                      <option value="id">Bahasa Indonesia</option>
+                    </select>
+                  </div>
+                  <div class="space-y-1">
+                    <label for="pdf-framework" class="text-[11px] text-[#8A8D96] block">Methodology</label>
+                    <input
+                      id="pdf-framework"
+                      v-model.trim="methodologyFramework"
+                      type="text"
+                      maxlength="120"
+                      class="input-glass w-full px-2.5 py-1.5 text-xs"
+                    />
+                  </div>
+                </div>
               </div>
 
               <!-- Job Status Progress -->
@@ -383,18 +442,24 @@
         <!-- Live Cover / Interior Preview & Report History (7 cols) -->
         <div class="lg:col-span-7 space-y-6">
           <div class="space-y-3">
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-2">
               <span class="font-mono text-xs uppercase tracking-wider text-[#8A8D96]">
                 {{ showCoverPage ? 'Live Cover Preview (A4)' : 'Executive Page Preview' }}
               </span>
-              <span class="font-mono text-[11px] text-[#8A8D96]">Print specimen</span>
+              <span class="font-mono text-[11px] text-[#8A8D96]">
+                {{ isProTier ? 'Pro White-Label specimen' : 'Free Tier output' }}
+              </span>
             </div>
 
-            <!-- A4 Mock Cover Canvas -->
+            <!-- A4 Full-Bleed Cover Specimen -->
             <div
               v-if="showCoverPage"
-              class="relative overflow-hidden border border-white/20 p-8 sm:p-10 shadow-2xl aspect-[1/1.414] max-w-md mx-auto flex flex-col justify-between transition-colors"
-              :style="{ backgroundColor: safePrimaryColor, color: accessibleCoverText }"
+              class="relative overflow-hidden border border-white/20 shadow-2xl aspect-[1/1.414] max-w-md mx-auto flex flex-col justify-between transition-colors p-7 sm:p-8 pl-8 sm:pl-10"
+              :style="{
+                backgroundColor: previewPrimaryColor,
+                color: previewCoverText,
+                borderLeft: `14px solid ${previewSecondaryColor}`,
+              }"
             >
               <!-- Watermark overlay on Free plan -->
               <div
@@ -402,72 +467,92 @@
                 class="pointer-events-none select-none absolute inset-0 flex items-center justify-center z-20"
               >
                 <span
-                  class="-rotate-30 px-5 py-2 bg-black/65 border border-white/30 text-white text-xl font-display font-bold tracking-widest uppercase shadow-lg"
+                  class="-rotate-45 px-4 py-1.5 bg-red-500/10 border border-red-400/25 text-red-200/75 text-lg font-display font-bold tracking-[0.22em] uppercase"
                 >
                   Free Tier Preview
                 </span>
               </div>
 
-              <!-- Header on Paper -->
+              <!-- Top Header Band -->
               <div
-                class="flex justify-between items-start pb-4 relative z-10 border-b"
-                :style="{ borderColor: coverDividerColor }"
+                class="flex justify-between items-center gap-3 pb-3.5 relative z-10 border-b"
+                :style="{ borderColor: previewDividerColor }"
               >
-                <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2.5 min-w-0">
                   <div
-                    class="h-10 w-10 flex items-center justify-center overflow-hidden font-bold text-xs border"
-                    :style="{ backgroundColor: coverFrameBg, borderColor: coverDividerColor }"
+                    class="h-9 w-9 flex items-center justify-center overflow-hidden font-bold text-xs border shrink-0"
+                    :style="{ backgroundColor: previewFrameBg, borderColor: previewDividerColor }"
                   >
                     <img
-                      v-if="workspace?.custom_logo_url"
+                      v-if="isProTier && workspace?.custom_logo_url"
                       :src="workspace.custom_logo_url"
                       alt="Agency logo"
                       class="h-full w-full object-contain"
                     />
-                    <span v-else>{{ workspaceInitials }}</span>
+                    <span v-else>{{ isProTier ? workspaceInitials : 'VF' }}</span>
                   </div>
-                  <div>
-                    <div class="font-bold text-xs">{{ workspace?.name || 'Security Team' }}</div>
-                    <div class="text-[10px] opacity-80">Confidential Audit Report</div>
+                  <div class="min-w-0">
+                    <div class="font-bold text-xs truncate">{{ previewAgencyName }}</div>
+                    <div class="text-[10px] opacity-80 truncate">Confidential Security Deliverable</div>
                   </div>
                 </div>
 
                 <span
-                  class="text-[10px] font-medium px-2 py-0.5"
-                  :style="{ backgroundColor: safeSecondaryColor, color: accessibleAccentText }"
+                  class="font-mono text-[9px] uppercase tracking-wider px-2 py-0.5 border whitespace-nowrap shrink-0"
+                  :style="{ borderColor: previewDividerColor }"
                 >
-                  {{ isProTier ? 'White-Label' : 'Preview' }}
+                  {{ isProTier ? `CONFIDENTIAL · v1.${reports.length}` : 'FREE TIER PREVIEW' }}
                 </span>
               </div>
 
-              <!-- Title Section on Paper -->
-              <div class="space-y-4 my-auto relative z-10">
-                <div class="text-[10px] tracking-widest opacity-80 uppercase">
-                  Security Assessment Report
+              <!-- Middle Editorial Band -->
+              <div class="space-y-4 my-auto py-4 relative z-10">
+                <div
+                  class="inline-block whitespace-nowrap text-[9px] font-mono tracking-[0.14em] font-bold uppercase px-2.5 py-1"
+                  :style="{ backgroundColor: previewSecondaryColor, color: previewAccentText }"
+                >
+                  SECURITY ASSESSMENT REPORT (v1.{{ reports.length }})
                 </div>
-                <h2 class="font-display text-2xl font-bold leading-tight">
+
+                <h2 class="font-display text-xl sm:text-2xl font-bold leading-tight">
                   {{ activeProject?.name || 'Application Security Assessment' }}
                 </h2>
-                <div class="space-y-1 text-xs opacity-90">
-                  <div><strong>Client:</strong> {{ activeProject?.client_name || 'Client Name' }}</div>
-                  <div>
-                    <strong>Scope:</strong>
-                    {{ activeProject?.target_scope.slice(0, 3).join(', ') || 'Authorized Targets' }}
-                  </div>
+
+                <div class="text-xs opacity-90">
+                  Prepared for: <strong>{{ activeProject?.client_name || 'Client Name' }}</strong>
                 </div>
+
+                <!-- Structured Metadata Grid -->
+                <dl
+                  class="grid grid-cols-2 gap-x-4 gap-y-2.5 py-3 border-y text-[10px]"
+                  :style="{ borderColor: previewDividerColor }"
+                >
+                  <div class="min-w-0">
+                    <dt class="font-mono uppercase tracking-wider opacity-70 text-[9px]">Client</dt>
+                    <dd class="font-semibold truncate mt-0.5">{{ activeProject?.client_name || 'Client Name' }}</dd>
+                  </div>
+                  <div class="min-w-0">
+                    <dt class="font-mono uppercase tracking-wider opacity-70 text-[9px]">Version</dt>
+                    <dd class="font-mono font-semibold mt-0.5">v1.{{ reports.length }}</dd>
+                  </div>
+                  <div class="col-span-2 min-w-0">
+                    <dt class="font-mono uppercase tracking-wider opacity-70 text-[9px]">Authorized Scope</dt>
+                    <dd class="font-mono truncate mt-0.5">{{ previewScopeLabel }}</dd>
+                  </div>
+                </dl>
               </div>
 
-              <!-- Footer on Paper -->
+              <!-- Footer Band -->
               <div
-                class="pt-4 space-y-2 relative z-10 border-t"
-                :style="{ borderColor: coverDividerColor }"
+                class="pt-3.5 space-y-2 relative z-10 border-t"
+                :style="{ borderColor: previewDividerColor }"
               >
-                <p class="text-[10px] opacity-85 italic leading-snug">
-                  {{ confidentialityText || 'Confidential document prepared for authorized stakeholders.' }}
+                <p class="text-[9px] opacity-85 leading-snug line-clamp-2">
+                  {{ previewConfidentiality }}
                 </p>
-                <div class="flex justify-between items-center text-[9px] font-mono opacity-75">
-                  <span>{{ workspace?.name || 'VulnFlow' }}</span>
-                  <span>v1.{{ reports.length }}</span>
+                <div class="flex justify-between items-center text-[9px] font-mono opacity-80">
+                  <span>{{ previewAgencyName }}</span>
+                  <span>Security Assessment Report · v1.{{ reports.length }}</span>
                 </div>
               </div>
             </div>
@@ -480,10 +565,10 @@
               <div class="space-y-4">
                 <div
                   class="flex items-center justify-between pb-3 border-b-2"
-                  :style="{ borderColor: safePrimaryColor }"
+                  :style="{ borderColor: previewPrimaryColor }"
                 >
-                  <span class="font-display font-bold text-sm" :style="{ color: safePrimaryColor }">
-                    {{ workspace?.name || 'Security Team' }}
+                  <span class="font-display font-bold text-sm" :style="{ color: previewPrimaryColor }">
+                    {{ previewAgencyName }}
                   </span>
                   <span class="text-[10px] text-slate-500 uppercase tracking-wider">Executive Summary</span>
                 </div>
@@ -533,9 +618,19 @@
                   <div class="font-medium text-[#F5F5F3]">
                     {{ rep.report_title }} <span class="font-mono text-[#8A8D96]">({{ rep.version }})</span>
                   </div>
-                  <div class="font-mono text-[11px] text-[#8A8D96]">
-                    {{ formatDate(rep.generated_at) }} ·
-                    {{ rep.watermark_applied ? 'Free watermark' : 'White-label' }}
+                  <div class="font-mono text-[11px] text-[#8A8D96] flex flex-wrap items-center gap-2">
+                    <span>
+                      {{ formatDate(rep.generated_at) }} ·
+                      {{ rep.watermark_applied ? 'Free watermark' : 'White-label' }}
+                      {{ rep.is_rasterized ? ' · Pixel-locked' : '' }}
+                    </span>
+                    <router-link
+                      v-if="rep.verification_code"
+                      :to="`/verify/${encodeURIComponent(rep.verification_code)}`"
+                      class="text-[#D4D4D8] underline underline-offset-4 hover:text-[#F5F5F3]"
+                    >
+                      Verify ({{ rep.verification_code }})
+                    </router-link>
                   </div>
                 </div>
                 <button
@@ -588,7 +683,8 @@ const quotaHitApi = ref(false)
 const quotaExhausted = computed(() => {
   if (quotaHitApi.value) return true
   const sub = session.state.subscription
-  return Boolean(sub && sub.remaining_reports <= 0)
+  if (!sub || sub.is_unlimited || sub.monthly_report_quota < 0) return false
+  return sub.remaining_reports <= 0
 })
 
 const workspaceInitials = computed(() => {
@@ -621,6 +717,11 @@ const narratives = ref<AINarrativeResponse[]>([])
 const includeAiNarratives = ref(true)
 const showCoverPage = ref(true)
 const showCvssRadar = ref(true)
+const showToc = ref(true)
+const showMethodology = ref(true)
+const showPocAttachments = ref(true)
+const reportLanguage = ref<'en' | 'id'>('en')
+const methodologyFramework = ref('OWASP WSTG & PTES')
 const reports = ref<ReportSummary[]>([])
 const activeJob = ref<ReportJobStatusResponse | null>(null)
 const isCompiling = ref(false)
@@ -654,16 +755,36 @@ onUnmounted(() => {
 })
 
 const accessibleCoverText = computed(() => pickAccessibleTextColor(safePrimaryColor.value))
-const accessibleAccentText = computed(() => pickAccessibleTextColor(safeSecondaryColor.value))
 const primaryContrast = computed(() =>
   computeContrastRatio(accessibleCoverText.value, safePrimaryColor.value)
 )
-const coverDividerColor = computed(() =>
-  accessibleCoverText.value === '#FFFFFF' ? 'rgba(255,255,255,0.22)' : 'rgba(15,23,42,0.22)'
+
+const previewPrimaryColor = computed(() => (isProTier.value ? safePrimaryColor.value : '#0F172A'))
+const previewSecondaryColor = computed(() =>
+  isProTier.value ? safeSecondaryColor.value : '#3B82F6'
 )
-const coverFrameBg = computed(() =>
-  accessibleCoverText.value === '#FFFFFF' ? 'rgba(255,255,255,0.14)' : 'rgba(15,23,42,0.08)'
+const previewAgencyName = computed(() =>
+  isProTier.value ? workspace.value?.name || 'Security Team' : 'VulnFlow AI'
 )
+const previewConfidentiality = computed(() =>
+  isProTier.value && confidentialityText.value.trim()
+    ? confidentialityText.value
+    : 'Confidential: Prepared exclusively for authorized client stakeholders.'
+)
+const previewCoverText = computed(() => pickAccessibleTextColor(previewPrimaryColor.value))
+const previewAccentText = computed(() => pickAccessibleTextColor(previewSecondaryColor.value))
+const previewDividerColor = computed(() =>
+  previewCoverText.value === '#FFFFFF' ? 'rgba(255,255,255,0.22)' : 'rgba(15,23,42,0.22)'
+)
+const previewFrameBg = computed(() =>
+  previewCoverText.value === '#FFFFFF' ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)'
+)
+const previewScopeLabel = computed(() => {
+  const scopes = activeProject.value?.target_scope ?? []
+  if (scopes.length === 0) return 'Authorized Targets'
+  const head = scopes.slice(0, 3).join(', ')
+  return scopes.length > 3 ? `${head} (+${scopes.length - 3} more)` : head
+})
 
 const jobStageText = computed(() => {
   const j = activeJob.value
@@ -804,6 +925,11 @@ const compilePDF = async () => {
         secondary_color: safeSecondaryColor.value,
         show_cover_page: showCoverPage.value,
         show_cvss_radar: showCvssRadar.value,
+        show_toc: showToc.value,
+        show_methodology: showMethodology.value,
+        show_poc_attachments: showPocAttachments.value,
+        report_language: reportLanguage.value,
+        methodology_framework: methodologyFramework.value || 'OWASP WSTG & PTES',
         confidentiality_notice: confidentialityText.value,
       },
     })
@@ -821,7 +947,11 @@ const compilePDF = async () => {
         if (jobStatus.status === 'COMPLETED') {
           window.clearInterval(pollTimer)
           isCompiling.value = false
-          await Promise.all([loadProjectReportingData(), session.refreshSubscription()])
+          await Promise.all([
+            loadProjectReportingData(),
+            session.refreshSubscription(),
+            session.refreshProjectProgress(),
+          ])
           toast.success('PDF report is ready to download.')
         } else if (jobStatus.status === 'FAILED') {
           window.clearInterval(pollTimer)

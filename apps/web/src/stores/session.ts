@@ -1,6 +1,7 @@
-import { computed, reactive } from 'vue'
+import { computed, reactive, type InjectionKey } from 'vue'
 import {
   api,
+  ApiError,
   authStorage,
   type Project,
   type RegisterResponse,
@@ -12,6 +13,31 @@ import {
   type WorkspaceRole,
 } from '@/services/api'
 
+export const OPEN_CLI_DRAWER_KEY: InjectionKey<(projectId?: string | null) => void> =
+  Symbol('openCliDrawer')
+
+export interface ProjectProgress {
+  projectId: string | null
+  loaded: boolean
+  totalFindings: number
+  curatedFindings: number
+  hasNarrative: boolean
+  narrativeApproved: boolean
+  reportCount: number
+}
+
+function emptyProjectProgress(projectId: string | null = null): ProjectProgress {
+  return {
+    projectId,
+    loaded: false,
+    totalFindings: 0,
+    curatedFindings: 0,
+    hasNarrative: false,
+    narrativeApproved: false,
+    reportCount: 0,
+  }
+}
+
 interface SessionState {
   hasToken: boolean
   user: UserDTO | null
@@ -21,8 +47,10 @@ interface SessionState {
   subscription: SubscriptionStatus | null
   projects: Project[]
   activeProjectId: string | null
+  projectProgress: ProjectProgress
   initialized: boolean
   hydrating: boolean
+  connectionError: string | null
 }
 
 const state = reactive<SessionState>({
@@ -34,14 +62,25 @@ const state = reactive<SessionState>({
   subscription: null,
   projects: [],
   activeProjectId: authStorage.getActiveProjectId(),
+  projectProgress: emptyProjectProgress(authStorage.getActiveProjectId()),
   initialized: false,
   hydrating: false,
+  connectionError: null,
 })
 
 let inFlightHydration: Promise<void> | null = null
 
 const isAuthenticated = computed(() => state.hasToken)
 const isSuperadmin = computed(() => Boolean(state.user?.is_superadmin))
+
+const ownsFreeWorkspace = computed(() =>
+  state.memberships.some(
+    (m) =>
+      m.role === 'MANAGER' &&
+      (m.tier ?? (m.id === state.activeWorkspaceId ? state.subscription?.tier : null) ?? 'FREE') ===
+        'FREE'
+  )
+)
 
 const activeRole = computed<WorkspaceRole>(() => {
   const match = state.memberships.find((m) => m.id === state.activeWorkspaceId)
@@ -51,6 +90,38 @@ const activeRole = computed<WorkspaceRole>(() => {
 const activeProject = computed<Project | null>(() => {
   return state.projects.find((p) => p.id === state.activeProjectId) ?? null
 })
+
+async function refreshProjectProgress(): Promise<void> {
+  const wId = state.activeWorkspaceId
+  const pId = state.activeProjectId
+  if (!wId || !pId) {
+    state.projectProgress = emptyProjectProgress(null)
+    return
+  }
+
+  try {
+    const [findingsRes, narrativeList, reportList] = await Promise.all([
+      api.findings.list(wId, pId, { limit: 1 }),
+      api.ai.listNarratives(wId, pId),
+      api.reports.list(wId, pId),
+    ])
+    // Guard against workspace/project switches completing out of order.
+    if (state.activeWorkspaceId !== wId || state.activeProjectId !== pId) {
+      return
+    }
+    state.projectProgress = {
+      projectId: pId,
+      loaded: true,
+      totalFindings: findingsRes.summary.total,
+      curatedFindings: findingsRes.summary.curated,
+      hasNarrative: narrativeList.length > 0,
+      narrativeApproved: narrativeList.some((n) => n.approval_status === 'APPROVED'),
+      reportCount: reportList.length,
+    }
+  } catch {
+    // Keep UI navigation functional even if telemetry refresh fails transiently.
+  }
+}
 
 async function loadWorkspaceContext(workspaceId: string): Promise<void> {
   const [ws, sub, projList] = await Promise.all([
@@ -70,6 +141,8 @@ async function loadWorkspaceContext(workspaceId: string): Promise<void> {
     state.activeProjectId = firstActive?.id ?? null
     authStorage.setActiveProjectId(state.activeProjectId)
   }
+  state.projectProgress = emptyProjectProgress(state.activeProjectId)
+  void refreshProjectProgress()
 }
 
 function clearWorkspaceContext(): void {
@@ -77,6 +150,7 @@ function clearWorkspaceContext(): void {
   state.subscription = null
   state.projects = []
   state.activeProjectId = null
+  state.projectProgress = emptyProjectProgress(null)
   authStorage.setActiveProjectId(null)
 }
 
@@ -117,9 +191,18 @@ async function hydrate(force = false): Promise<void> {
         clearWorkspaceContext()
       }
       state.initialized = true
+      state.connectionError = null
     } catch (err) {
-      authStorage.clear()
-      resetState()
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        authStorage.clear()
+        resetState()
+      } else {
+        // Preserve session credentials on transient network/gateway errors so the UI can retry.
+        state.connectionError =
+          err instanceof Error
+            ? `${err.message} Your session is preserved.`
+            : 'Cannot reach API server. Your session is preserved.'
+      }
       throw err
     } finally {
       state.hydrating = false
@@ -128,6 +211,11 @@ async function hydrate(force = false): Promise<void> {
   })()
 
   return inFlightHydration
+}
+
+async function retryConnection(): Promise<void> {
+  state.connectionError = null
+  await hydrate(true)
 }
 
 function resetState(): void {
@@ -139,8 +227,10 @@ function resetState(): void {
   state.subscription = null
   state.projects = []
   state.activeProjectId = null
+  state.projectProgress = emptyProjectProgress(null)
   state.initialized = false
   state.hydrating = false
+  state.connectionError = null
 }
 
 async function applyLogin(res: TokenResponse): Promise<void> {
@@ -176,6 +266,7 @@ async function switchWorkspace(workspaceId: string): Promise<void> {
   state.activeWorkspaceId = workspaceId
   authStorage.setActiveWorkspaceId(workspaceId)
   state.activeProjectId = null
+  state.projectProgress = emptyProjectProgress(null)
   authStorage.setActiveProjectId(null)
   await loadWorkspaceContext(workspaceId)
 }
@@ -183,6 +274,8 @@ async function switchWorkspace(workspaceId: string): Promise<void> {
 function selectProject(projectId: string | null): void {
   state.activeProjectId = projectId
   authStorage.setActiveProjectId(projectId)
+  state.projectProgress = emptyProjectProgress(projectId)
+  void refreshProjectProgress()
 }
 
 async function refreshWorkspace(): Promise<void> {
@@ -205,6 +298,8 @@ async function refreshProjects(): Promise<void> {
     const next = list.find((p) => p.status === 'ACTIVE') ?? list[0] ?? null
     state.activeProjectId = next?.id ?? null
     authStorage.setActiveProjectId(state.activeProjectId)
+    state.projectProgress = emptyProjectProgress(state.activeProjectId)
+    void refreshProjectProgress()
   }
 }
 
@@ -229,15 +324,18 @@ export const session = {
   state,
   isAuthenticated,
   isSuperadmin,
+  ownsFreeWorkspace,
   activeRole,
   activeProject,
   hydrate,
+  retryConnection,
   applyLogin,
   applyRegister,
   switchWorkspace,
   selectProject,
   refreshWorkspace,
   refreshProjects,
+  refreshProjectProgress,
   refreshSubscription,
   logout,
 }

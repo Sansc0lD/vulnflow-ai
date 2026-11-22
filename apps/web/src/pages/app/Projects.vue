@@ -185,6 +185,21 @@
                 </div>
               </div>
 
+              <div v-if="formatTechStackTags(p.tech_stack).length > 0">
+                <span class="font-mono text-[10px] uppercase tracking-wider text-[#8A8D96] block">
+                  Target Architecture
+                </span>
+                <div class="flex flex-wrap gap-1.5 mt-1 font-mono">
+                  <span
+                    v-for="tag in formatTechStackTags(p.tech_stack)"
+                    :key="tag"
+                    class="px-2 py-0.5 bg-white/[0.04] border border-white/[0.12] text-[10px] text-[#D4D4D8] uppercase"
+                  >
+                    {{ tag }}
+                  </span>
+                </div>
+              </div>
+
               <div>
                 <label
                   :for="`lead-select-${p.id}`"
@@ -365,6 +380,56 @@
             class="input-glass w-full p-3 font-mono text-xs"
           ></textarea>
         </div>
+
+        <div class="border border-white/[0.1] bg-[#050507] p-3.5 space-y-3">
+          <div>
+            <div class="text-xs font-medium text-[#F5F5F3]">
+              Target Tech Stack (Optional, Stack-Aware Remediation)
+            </div>
+            <p class="text-[11px] text-[#8A8D96] mt-0.5 leading-relaxed">
+              Only abstract enum tags are shared with the AI Ghostwriter to tailor fix examples. Raw PoC and source code never leave your database.
+            </p>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+            <select v-model="form.stackLanguage" aria-label="Primary language" class="input-glass px-2.5 py-1.5 text-xs">
+              <option value="">Language (Any)</option>
+              <option value="python">Python</option>
+              <option value="typescript">TypeScript</option>
+              <option value="javascript">JavaScript</option>
+              <option value="go">Go</option>
+              <option value="java">Java</option>
+              <option value="php">PHP</option>
+              <option value="csharp">C# / .NET</option>
+              <option value="ruby">Ruby</option>
+              <option value="other">Other</option>
+            </select>
+            <select v-model="form.stackFramework" aria-label="Framework" class="input-glass px-2.5 py-1.5 text-xs">
+              <option value="">Framework (Any)</option>
+              <option value="fastapi">FastAPI</option>
+              <option value="django">Django</option>
+              <option value="flask">Flask</option>
+              <option value="express">Express</option>
+              <option value="nestjs">NestJS</option>
+              <option value="nextjs">Next.js</option>
+              <option value="laravel">Laravel</option>
+              <option value="spring_boot">Spring Boot</option>
+              <option value="aspnet">ASP.NET</option>
+              <option value="rails">Rails</option>
+              <option value="gin">Gin</option>
+              <option value="other">Other</option>
+            </select>
+            <select v-model="form.stackDatabase" aria-label="Database" class="input-glass px-2.5 py-1.5 text-xs">
+              <option value="">Database (Any)</option>
+              <option value="postgresql">PostgreSQL</option>
+              <option value="mysql">MySQL</option>
+              <option value="mongodb">MongoDB</option>
+              <option value="mssql">SQL Server</option>
+              <option value="sqlite">SQLite</option>
+              <option value="redis">Redis</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+        </div>
       </form>
 
       <template #footer>
@@ -393,17 +458,11 @@
         </div>
       </template>
     </BaseModal>
-
-    <CliIngestDrawer
-      :open="cliDrawerOpen"
-      :project-id="cliProjectId"
-      @close="cliDrawerOpen = false"
-    />
   </AppLayout>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, inject, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowRight,
@@ -417,14 +476,14 @@ import {
 } from 'lucide-vue-next'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
-import CliIngestDrawer from '@/components/ui/CliIngestDrawer.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import StatusBadge from '@/components/ui/StatusBadge.vue'
-import { api, type Project, type WorkspaceMember } from '@/services/api'
-import { session } from '@/stores/session'
+import { api, type Project, type ProjectTechStack, type WorkspaceMember } from '@/services/api'
+import { OPEN_CLI_DRAWER_KEY, session } from '@/stores/session'
 import { toast } from '@/stores/toast'
 
 const router = useRouter()
+const openCliDrawer = inject(OPEN_CLI_DRAWER_KEY, () => {})
 
 const statusFilter = ref<'ALL' | 'ACTIVE' | 'ARCHIVED'>('ALL')
 const searchQuery = ref('')
@@ -433,8 +492,6 @@ const showModal = ref(false)
 const saving = ref(false)
 const editingProjectId = ref<string | null>(null)
 const recentlyCreatedProject = ref<Project | null>(null)
-const cliDrawerOpen = ref(false)
-const cliProjectId = ref<string | null>(null)
 const expandedScopes = reactive<Record<string, boolean>>({})
 
 const isManager = computed(() => session.activeRole.value === 'MANAGER')
@@ -485,7 +542,17 @@ const form = ref({
   roeEndLocal: '',
   scopeRaw: '',
   status: 'ACTIVE' as 'ACTIVE' | 'ARCHIVED',
+  stackLanguage: '' as NonNullable<ProjectTechStack['language']> | '',
+  stackFramework: '' as NonNullable<ProjectTechStack['framework']> | '',
+  stackDatabase: '' as NonNullable<ProjectTechStack['database']> | '',
 })
+
+const formatTechStackTags = (stack?: ProjectTechStack | null): string[] => {
+  if (!stack) return []
+  return [stack.language, stack.framework, stack.database]
+    .filter((v) => Boolean(v))
+    .map((v) => String(v))
+}
 
 watch(
   () => session.state.activeWorkspaceId,
@@ -542,6 +609,9 @@ const openCreateModal = () => {
     roeEndLocal: toLocalInputValue(end),
     scopeRaw: '127.0.0.1\nlocalhost',
     status: 'ACTIVE',
+    stackLanguage: '',
+    stackFramework: '',
+    stackDatabase: '',
   }
   showModal.value = true
 }
@@ -556,8 +626,19 @@ const openEditModal = (p: Project) => {
     roeEndLocal: toLocalInputValue(new Date(p.roe_end_date)),
     scopeRaw: p.target_scope.join('\n'),
     status: p.status,
+    stackLanguage: p.tech_stack?.language || '',
+    stackFramework: p.tech_stack?.framework || '',
+    stackDatabase: p.tech_stack?.database || '',
   }
   showModal.value = true
+}
+
+const buildTechStackPayload = (): ProjectTechStack | null => {
+  const stack: ProjectTechStack = {}
+  if (form.value.stackLanguage) stack.language = form.value.stackLanguage
+  if (form.value.stackFramework) stack.framework = form.value.stackFramework
+  if (form.value.stackDatabase) stack.database = form.value.stackDatabase
+  return Object.keys(stack).length > 0 ? stack : null
 }
 
 const handleSaveProject = async () => {
@@ -581,6 +662,7 @@ const handleSaveProject = async () => {
   }
 
   saving.value = true
+  const techStack = buildTechStackPayload()
   try {
     if (editingProjectId.value) {
       await api.projects.update(wId, editingProjectId.value, {
@@ -591,6 +673,7 @@ const handleSaveProject = async () => {
         roe_end_date: endIso,
         timezone: form.value.timezone,
         status: form.value.status,
+        tech_stack: techStack ?? {},
       })
       toast.success('Project updated.')
     } else {
@@ -601,12 +684,14 @@ const handleSaveProject = async () => {
         roe_start_date: startIso,
         roe_end_date: endIso,
         timezone: form.value.timezone,
+        ...(techStack ? { tech_stack: techStack } : {}),
       })
       session.selectProject(created.id)
       recentlyCreatedProject.value = created
       toast.success('Project created and activated.')
     }
     await session.refreshProjects()
+    void session.refreshProjectProgress()
     showModal.value = false
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Unable to save project.')
@@ -643,8 +728,7 @@ const openInTriage = async (project: Project) => {
 
 const openCliForProject = (project: Project) => {
   session.selectProject(project.id)
-  cliProjectId.value = project.id
-  cliDrawerOpen.value = true
+  openCliDrawer(project.id)
 }
 
 const copyProjectId = async (projectId: string) => {
