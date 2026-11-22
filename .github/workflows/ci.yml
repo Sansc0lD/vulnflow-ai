@@ -1,0 +1,109 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  backend-quality:
+    name: Backend Quality Gates & Resilience Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install native PDF rendering libraries (WeasyPrint)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libpango-1.0-0 \
+            libharfbuzz0b \
+            libpangoft2-1.0-0 \
+            libpangocairo-1.0-0 \
+            libcairo2 \
+            libgdk-pixbuf-2.0-0 \
+            shared-mime-info \
+            fonts-dejavu-core
+
+      - name: Set up uv & Python 3.12
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install Python workspace dependencies
+        run: uv sync --frozen --all-packages
+
+      - name: Run final quality gate (--final)
+        env:
+          ENCRYPTION_MASTER_KEY: "9EL3Yj4ANNfiuFYY7zBoYc6XLnoD3GZpcBc6lWGLL9U="
+          JWT_SECRET_KEY: "ci-ephemeral-jwt-signing-secret-for-automated-tests-only"
+          SEED_ADMIN_PASSWORD: "VulnFlow-CI-Seed-Password-2026!"
+        run: uv run python scripts/check_quality.py --final
+
+  postgres-semantics:
+    name: PostgreSQL 16 Schema & Partition Semantics
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: vulnflow
+          POSTGRES_PASSWORD: ci_postgres_password
+          POSTGRES_DB: vulnflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U vulnflow -d vulnflow_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv & Python 3.12
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install Python workspace dependencies
+        run: uv sync --frozen --all-packages
+
+      - name: Run PostgreSQL semantics test suite
+        env:
+          TEST_DATABASE_URL: "postgresql+psycopg://vulnflow:ci_postgres_password@127.0.0.1:5432/vulnflow_test"
+        run: uv run pytest tests/models/test_postgres_semantics.py -v
+
+  frontend-build:
+    name: Frontend Type-Check & Production Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        run: pnpm --dir apps/web install --frozen-lockfile
+
+      - name: Type-check Vue SPA (vue-tsc)
+        run: pnpm --dir apps/web run type-check
+
+      - name: Build production bundle (vite build)
+        run: pnpm --dir apps/web run build
