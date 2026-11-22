@@ -542,4 +542,5 @@ def test_compile_report_embeds_workspace_logo_honors_explicit_ids_and_radar_flag
         render_fn=_capture,
     )
     assert storage.downloaded_keys == []
-    assert "data:image/png;base64," not in html_outputs[1]
+    assert 'class="cover-logo"' not in html_outputs[1]
+    assert 'alt="Agency Logo"' not in html_outputs[1]

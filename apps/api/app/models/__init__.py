@@ -4,6 +4,7 @@ from app.models.ai_narrative import AINarrative
 from app.models.api_key import APIKey
 from app.models.audit_log import AuditLog
 from app.models.base import Base
+from app.models.enterprise_inquiry import EnterpriseInquiry
 from app.models.finding import Finding
 from app.models.project import Project
 from app.models.proof_of_concept import ProofOfConcept
@@ -18,6 +19,7 @@ __all__ = [
     "APIKey",
     "AuditLog",
     "Base",
+    "EnterpriseInquiry",
     "Finding",
     "Project",
     "ProofOfConcept",

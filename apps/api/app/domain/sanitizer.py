@@ -13,6 +13,29 @@ import re
 
 _WHITELISTED_FIELDS = ("title", "cwe_id", "cvss_score", "severity")
 
+TECH_STACK_ALLOWLIST: dict[str, frozenset[str]] = {
+    "language": frozenset(
+        {"python", "typescript", "javascript", "go", "java", "php", "csharp", "ruby", "other"}
+    ),
+    "framework": frozenset(
+        {
+            "fastapi",
+            "django",
+            "flask",
+            "express",
+            "nestjs",
+            "nextjs",
+            "laravel",
+            "spring_boot",
+            "aspnet",
+            "rails",
+            "gin",
+            "other",
+        }
+    ),
+    "database": frozenset({"postgresql", "mysql", "mongodb", "mssql", "sqlite", "redis", "other"}),
+}
+
 _CONTROL_CHAR_PATTERN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 _WHITESPACE_BREAK_PATTERN = re.compile(r"[\r\n\t]+")
 _URL_PATTERN = re.compile(r"\b\w+://\S+")
@@ -87,6 +110,20 @@ _JS_URI_PATTERN = re.compile(r"javascript\s*:", re.IGNORECASE)
 
 def whitelist_finding_metadata(finding: dict[str, object]) -> dict[str, object]:
     return {field: finding[field] for field in _WHITELISTED_FIELDS if field in finding}
+
+
+def whitelist_tech_stack(raw: dict[str, object] | None) -> dict[str, str]:
+    """Allow only strictly enumerated architecture tags to leave DB boundaries (Zero-PoC)."""
+    if not raw or not isinstance(raw, dict):
+        return {}
+    cleaned: dict[str, str] = {}
+    for key, allowed in TECH_STACK_ALLOWLIST.items():
+        val = raw.get(key)
+        if isinstance(val, str):
+            norm = val.strip().lower()
+            if norm in allowed:
+                cleaned[key] = norm
+    return cleaned
 
 
 def _looks_like_hostname(candidate: str) -> bool:

@@ -47,7 +47,8 @@ router = APIRouter(
 )
 
 FREE_TIER_BATCH_LIMIT = 50  # EC-10
-HARD_BATCH_LIMIT = 500  # SRS FR-INGEST-003
+HARD_BATCH_LIMIT = 500  # SRS FR-INGEST-003 (FREE/PRO default)
+DEFAULT_ENTERPRISE_BATCH_LIMIT = 2000
 # EC-07/EDGE_CASES §5.5: long enough to cover a realistic CLI retry window
 # for a large chunked upload over a bad connection, short enough that a
 # genuinely new upload under the same key eventually gets a fresh outcome.
@@ -98,16 +99,19 @@ def _get_project_or_404(db: Session, workspace_id: uuid.UUID, project_id: uuid.U
 
 
 def _check_batch_size(db: Session, workspace_id: uuid.UUID, count: int) -> None:
-    if count > HARD_BATCH_LIMIT:
-        raise BatchLimitExceededError(
-            f"Batch exceeds the hard limit of {HARD_BATCH_LIMIT} findings."
-        )
-
     subscription = db.query(Subscription).filter_by(workspace_id=workspace_id).one_or_none()
     tier = subscription.tier if subscription is not None else "FREE"
     if tier == "FREE" and count > FREE_TIER_BATCH_LIMIT:
         raise BatchLimitExceededError(
             f"Free tier is limited to {FREE_TIER_BATCH_LIMIT} findings per batch."
+        )
+
+    effective_max = HARD_BATCH_LIMIT
+    if tier == "ENTERPRISE" and subscription is not None:
+        effective_max = subscription.custom_batch_limit or DEFAULT_ENTERPRISE_BATCH_LIMIT
+    if count > effective_max:
+        raise BatchLimitExceededError(
+            f"Batch exceeds the allowed limit of {effective_max} findings."
         )
 
 

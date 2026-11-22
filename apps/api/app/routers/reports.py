@@ -20,6 +20,7 @@ from app.models.ai_narrative import AINarrative
 from app.models.project import Project
 from app.models.report import Report
 from app.models.subscription import Subscription
+from app.models.workspace import Workspace
 from app.models.workspace_member import WorkspaceMember
 from app.services.s3_storage import (
     S3StorageClient,
@@ -29,6 +30,7 @@ from app.services.s3_storage import (
 from vulnflow_contracts import (
     CompilePDFAcceptedResponse,
     CompilePDFRequest,
+    PublicReportVerifyResponse,
     ReportDownloadResponse,
     ReportJobStatus,
     ReportJobStatusResponse,
@@ -41,6 +43,7 @@ router = APIRouter(
 workspace_reports_router = APIRouter(
     prefix="/api/v1/workspaces/{workspace_id}/reports", tags=["reports"]
 )
+public_reports_router = APIRouter(prefix="/api/v1/public", tags=["public"])
 
 _require_requester_role = require_workspace_role({"MANAGER", "PENTESTER"})
 _require_any_member = require_workspace_role({"MANAGER", "PENTESTER", "VIEWER"})
@@ -86,6 +89,7 @@ def _check_subscription_quota_preflight(db: Session, workspace_id: uuid.UUID) ->
 
     if (
         not quota_elapsed
+        and subscription.monthly_report_quota >= 0
         and subscription.reports_used_this_month >= subscription.monthly_report_quota
     ):
         raise QuotaExhaustedError("Monthly report compilation quota exhausted.")
@@ -113,6 +117,10 @@ def list_project_reports(
             report_title=report.report_title,
             version=report.version,
             watermark_applied=report.watermark_applied,
+            verification_code=report.verification_code,
+            sha256_hash=report.sha256_hash,
+            is_rasterized=report.is_rasterized,
+            is_signed=report.is_signed,
             generated_at=report.generated_at,
             download_url=f"/api/v1/workspaces/{workspace_id}/reports/{report.id}/download",
         )
@@ -283,3 +291,37 @@ def download_report(
             expires_in_seconds=PRESIGNED_URL_TTL_SECONDS,
         )
     return RedirectResponse(url=presigned_url, status_code=307)
+
+
+@public_reports_router.get("/verify/{verification_code}", response_model=PublicReportVerifyResponse)
+def verify_report_provenance(
+    verification_code: str,
+    db: Session = Depends(get_db),
+) -> PublicReportVerifyResponse:
+    """Public non-sensitive provenance check (never leaks client, target, or findings)."""
+    cleaned_code = verification_code.strip().upper()
+    row = (
+        db.query(Report, Project, Workspace, Subscription)
+        .join(Project, Project.id == Report.project_id)
+        .join(Workspace, Workspace.id == Project.workspace_id)
+        .outerjoin(Subscription, Subscription.workspace_id == Workspace.id)
+        .filter(Report.verification_code == cleaned_code)
+        .one_or_none()
+    )
+    if row is None:
+        return PublicReportVerifyResponse(valid=False, verification_code=cleaned_code)
+
+    report, _project, workspace, subscription = row
+    is_paid = subscription is not None and subscription.tier != "FREE"
+    agency_name = workspace.name if is_paid else "VulnFlow AI"
+    return PublicReportVerifyResponse(
+        valid=True,
+        verification_code=cleaned_code,
+        report_version=report.version,
+        agency_name=agency_name,
+        generated_at=report.generated_at,
+        watermark_applied=report.watermark_applied,
+        is_rasterized=report.is_rasterized,
+        is_signed=report.is_signed,
+        sha256_hash=report.sha256_hash,
+    )

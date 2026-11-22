@@ -37,7 +37,7 @@ celery_app = Celery(
     "vulnflow",
     broker=_init_broker_url(),
     backend=_init_backend_url(),
-    include=["app.workers.report_worker"],
+    include=["app.workers.report_worker", "app.workers.ai_worker"],
 )
 # F4-MED-02: configure soft and hard time limits for report compilation
 celery_app.conf.update(

@@ -12,6 +12,8 @@ from app.models.workspace import Workspace
 from vulnflow_contracts import AITelemetryResponse, WorkspaceTokenUsage
 
 TOKEN_COST_USD_PER_MILLION = 0.15
+INPUT_TOKEN_COST_USD_PER_MILLION = 0.15
+OUTPUT_TOKEN_COST_USD_PER_MILLION = 0.60
 USD_TO_IDR_RATE = 16_000
 DEFAULT_MONTHLY_SPEND_CEILING_USD = 100.0
 _SPEND_CEILING_REDIS_KEY = "admin:ai:spend_ceiling_usd"
@@ -46,6 +48,16 @@ def estimate_cost_usd(total_tokens: int) -> float:
     return round((total_tokens / 1_000_000) * TOKEN_COST_USD_PER_MILLION, 6)
 
 
+def estimate_cost_usd_breakdown(
+    *, prompt_tokens: int, candidates_tokens: int, total_tokens: int
+) -> float:
+    if prompt_tokens > 0 or candidates_tokens > 0:
+        input_cost = (prompt_tokens / 1_000_000) * INPUT_TOKEN_COST_USD_PER_MILLION
+        output_cost = (candidates_tokens / 1_000_000) * OUTPUT_TOKEN_COST_USD_PER_MILLION
+        return round(input_cost + output_cost, 6)
+    return estimate_cost_usd(total_tokens)
+
+
 def estimate_cost_idr(cost_usd: float) -> int:
     return round(cost_usd * USD_TO_IDR_RATE)
 
@@ -56,6 +68,8 @@ def compute_ai_telemetry(db: Session, *, spend_ceiling_usd: float) -> AITelemetr
             Workspace.id,
             Workspace.name,
             func.coalesce(func.sum(AINarrative.tokens_consumed), 0),
+            func.coalesce(func.sum(AINarrative.prompt_tokens), 0),
+            func.coalesce(func.sum(AINarrative.candidates_tokens), 0),
             func.count(AINarrative.id),
         )
         .join(Project, Project.workspace_id == Workspace.id)
@@ -75,16 +89,22 @@ def compute_ai_telemetry(db: Session, *, spend_ceiling_usd: float) -> AITelemetr
     fallback_by_ws = {ws_id: int(cnt) for ws_id, cnt in fallback_counts_rows}
 
     total_tokens = 0
+    total_cost_usd = 0.0
     total_narratives = 0
     total_fallbacks = 0
     by_workspace: list[WorkspaceTokenUsage] = []
 
-    for ws_id, ws_name, ws_tokens_raw, ws_count_raw in rows:
+    for ws_id, ws_name, ws_tokens_raw, ws_prompt_raw, ws_cand_raw, ws_count_raw in rows:
         ws_tokens = int(ws_tokens_raw or 0)
+        ws_prompt = int(ws_prompt_raw or 0)
+        ws_cand = int(ws_cand_raw or 0)
         ws_count = int(ws_count_raw or 0)
         ws_fb = fallback_by_ws.get(ws_id, 0)
-        ws_cost_usd = estimate_cost_usd(ws_tokens)
+        ws_cost_usd = estimate_cost_usd_breakdown(
+            prompt_tokens=ws_prompt, candidates_tokens=ws_cand, total_tokens=ws_tokens
+        )
         total_tokens += ws_tokens
+        total_cost_usd = round(total_cost_usd + ws_cost_usd, 6)
         total_narratives += ws_count
         total_fallbacks += ws_fb
         by_workspace.append(
@@ -99,7 +119,6 @@ def compute_ai_telemetry(db: Session, *, spend_ceiling_usd: float) -> AITelemetr
             )
         )
 
-    total_cost_usd = estimate_cost_usd(total_tokens)
     fallback_ratio = round(total_fallbacks / total_narratives, 4) if total_narratives > 0 else 0.0
     return AITelemetryResponse(
         total_tokens=total_tokens,

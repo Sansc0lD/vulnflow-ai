@@ -27,6 +27,7 @@ class Subscription(Base):
     tier: Mapped[str] = mapped_column(String(20), default="FREE", nullable=False)
     monthly_report_quota: Mapped[int] = mapped_column(Integer, default=3, nullable=False)
     reports_used_this_month: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    custom_batch_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     quota_reset_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE", nullable=False)
     # Unique (SDD §2.4.2 #4 "Kode referensi order unik Midtrans"): the webhook

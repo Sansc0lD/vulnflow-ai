@@ -20,6 +20,12 @@ class Report(Base):
     version: Mapped[str] = mapped_column(String(20), default="v1.0", nullable=False)
     storage_path: Mapped[str] = mapped_column(String(500), nullable=False)  # S3 object key
     watermark_applied: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    sha256_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    verification_code: Mapped[str | None] = mapped_column(
+        String(32), unique=True, index=True, nullable=True
+    )
+    is_rasterized: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_signed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     generated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

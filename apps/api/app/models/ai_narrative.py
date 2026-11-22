@@ -26,6 +26,9 @@ class AINarrative(Base):
     business_impact: Mapped[str] = mapped_column(Text, nullable=False)
     remediation_priorities: Mapped[list[Any]] = mapped_column(JSONVariant, nullable=False)
     tokens_consumed: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    prompt_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    candidates_tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    model_used: Mapped[str | None] = mapped_column(String(80), nullable=True)
     is_fallback: Mapped[bool] = mapped_column(default=False, nullable=False)  # EC-14
     approval_status: Mapped[str] = mapped_column(String(20), default="DRAFT", nullable=False)
     generated_at: Mapped[datetime] = mapped_column(

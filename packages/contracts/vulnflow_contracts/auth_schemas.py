@@ -128,6 +128,7 @@ class WorkspaceMembership(BaseModel):
     id: str
     name: str
     role: WorkspaceRole
+    tier: str | None = None
 
 
 class RegisterResponse(BaseModel):

@@ -27,12 +27,21 @@ from app.models.proof_of_concept import ProofOfConcept
 from app.models.report import Report
 from app.models.subscription import Subscription
 from app.models.workspace import Workspace
+from app.services.email_service import get_app_base_url
+from app.services.pdf_protector import (
+    generate_qr_png_data_uri,
+    generate_verification_code,
+    protect_report_pdf,
+)
 from app.services.report_renderer import build_report_html, render_html_to_pdf
 from app.services.s3_storage import S3StorageClient
 from app.workers.celery_app import celery_app
 
 _SEVERITY_RANK = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
 _JOB_STATUS_TTL_SECONDS = 24 * 3600
+_MAX_POC_IMAGES_PER_FINDING = 3
+_MAX_POC_IMAGES_PER_REPORT = 20
+_MAX_POC_IMAGE_BYTES = 1_572_864
 
 
 def _try_get_encryption_key() -> bytes | None:
@@ -73,19 +82,60 @@ def _resolve_logo_for_pdf(
         encoded = base64.b64encode(raw_bytes).decode("ascii")
         return f"data:{content_type};base64,{encoded}"
 
+    if re.search(r"workspaces/[^/]+/", parsed_path):
+        return None
+
     return logo_url
+
+
+def _resolve_poc_attachments_for_pdf(
+    storage: Any,
+    workspace_id: uuid.UUID,
+    attachment_urls: list[str],
+    *,
+    remaining_budget: int,
+) -> list[dict[str, str]]:
+    """Fetch workspace-scoped PoC image attachments directly from S3 with OOM guards."""
+    download_fn = getattr(storage, "download_bytes", None)
+    if not attachment_urls or not callable(download_fn) or remaining_budget <= 0:
+        return []
+
+    resolved: list[dict[str, str]] = []
+    limit = min(_MAX_POC_IMAGES_PER_FINDING, remaining_budget)
+    pattern = re.compile(rf"(workspaces/{re.escape(str(workspace_id))}/[^\s?#]+)$")
+    for raw_url in attachment_urls:
+        if len(resolved) >= limit:
+            break
+        if isinstance(raw_url, str) and raw_url.startswith("data:image/"):
+            resolved.append({"data_uri": raw_url, "label": f"Attachment {len(resolved) + 1}"})
+            continue
+        parsed_path = urllib.parse.urlsplit(str(raw_url)).path
+        match = pattern.search(parsed_path)
+        if not match:
+            continue
+        object_key = match.group(1)
+        fetched = download_fn(object_key)
+        if fetched is None:
+            continue
+        raw_bytes, content_type = fetched
+        if not str(content_type).startswith("image/") or len(raw_bytes) > _MAX_POC_IMAGE_BYTES:
+            continue
+        encoded = base64.b64encode(raw_bytes).decode("ascii")
+        filename = object_key.rsplit("/", 1)[-1]
+        resolved.append({"data_uri": f"data:{content_type};base64,{encoded}", "label": filename})
+    return resolved
 
 
 def _decrypt_finding_pocs(
     db: Session, finding_ids: list[uuid.UUID]
-) -> dict[uuid.UUID, tuple[str, list[str]]]:
+) -> dict[uuid.UUID, tuple[str, list[str], list[str]]]:
     if not finding_ids:
         return {}
     pocs = db.query(ProofOfConcept).filter(ProofOfConcept.finding_id.in_(finding_ids)).all()
     if not pocs:
         return {}
     key = _try_get_encryption_key()
-    result: dict[uuid.UUID, tuple[str, list[str]]] = {}
+    result: dict[uuid.UUID, tuple[str, list[str], list[str]]] = {}
     for poc in pocs:
         raw_text = ""
         if key is not None:
@@ -97,7 +147,8 @@ def _decrypt_finding_pocs(
                     poc.auth_tag,
                 ).decode("utf-8", errors="replace")
         steps = list(poc.reproduction_steps or [])
-        result[poc.finding_id] = (raw_text, steps)
+        attachments = list(poc.attachment_file_urls or [])
+        result[poc.finding_id] = (raw_text, steps, attachments)
     return result
 
 
@@ -115,6 +166,7 @@ def compile_report(
     theme_options: dict[str, Any] | None = None,
     remediations: list[dict[str, Any]] | None = None,
     render_fn: Callable[[str], bytes] = render_html_to_pdf,
+    postprocess_fn: Callable[[bytes, bool], tuple[bytes, str, bool, bool]] | None = None,
 ) -> Report:
     # F4-LOW-02 & F4-HIGH-09: Fail-closed subscription lookup with row lock
     subscription = (
@@ -133,7 +185,10 @@ def compile_report(
             subscription.reports_used_this_month = 0
             subscription.quota_reset_date = now + timedelta(days=30)
 
-    if subscription.reports_used_this_month >= subscription.monthly_report_quota:
+    if (
+        subscription.monthly_report_quota >= 0
+        and subscription.reports_used_this_month >= subscription.monthly_report_quota
+    ):
         raise QuotaExhaustedError("Monthly report compilation quota exhausted.")
 
     # F4-LOW-03: Ensure project exists and belongs to workspace
@@ -163,9 +218,20 @@ def compile_report(
     findings.sort(key=lambda f: (_SEVERITY_RANK.get(f.severity, 99), -float(f.cvss_score)))
     poc_map = _decrypt_finding_pocs(db, [f.id for f in findings])
 
+    show_poc_attachments = (
+        bool(theme_options.get("show_poc_attachments", True)) if theme_options else True
+    )
+    remaining_attachment_budget = _MAX_POC_IMAGES_PER_REPORT if show_poc_attachments else 0
     finding_dicts = []
     for f in findings:
-        raw_evidence, steps = poc_map.get(f.id, ("", []))
+        raw_evidence, steps, attachment_urls = poc_map.get(f.id, ("", [], []))
+        poc_attachments = _resolve_poc_attachments_for_pdf(
+            storage,
+            workspace_id,
+            attachment_urls,
+            remaining_budget=remaining_attachment_budget,
+        )
+        remaining_attachment_budget = max(0, remaining_attachment_budget - len(poc_attachments))
         finding_dicts.append(
             {
                 "title": f.title,
@@ -178,6 +244,7 @@ def compile_report(
                 "endpoint_path": f.endpoint_path,
                 "raw_evidence": raw_evidence,
                 "reproduction_steps": steps,
+                "poc_attachments": poc_attachments,
             }
         )
 
@@ -199,11 +266,29 @@ def compile_report(
     )
     show_cover_page = bool(theme_options.get("show_cover_page", True)) if theme_options else True
     show_cvss_radar = bool(theme_options.get("show_cvss_radar", True)) if theme_options else True
+    show_toc = bool(theme_options.get("show_toc", True)) if theme_options else True
+    show_methodology = bool(theme_options.get("show_methodology", True)) if theme_options else True
+    report_language = str(theme_options.get("report_language", "en")) if theme_options else "en"
+    methodology_framework = (
+        str(theme_options.get("methodology_framework") or "OWASP WSTG & PTES")
+        if theme_options
+        else "OWASP WSTG & PTES"
+    )
     if is_paid_tier and theme_options:
         primary_color = str(theme_options.get("primary_color") or primary_color)
         secondary_color = str(theme_options.get("secondary_color") or secondary_color)
         if theme_options.get("confidentiality_notice"):
             confidentiality_text = str(theme_options["confidentiality_notice"])
+
+    scope_list = [s.strip() for s in (project.target_scope or "").splitlines() if s.strip()]
+    engagement_period = (
+        f"{project.roe_start_date.strftime('%d %b %Y')} - "
+        f"{project.roe_end_date.strftime('%d %b %Y')} ({project.timezone})"
+    )
+    generated_date = now.strftime("%d %b %Y")
+    verification_code = generate_verification_code()
+    verification_url = f"{get_app_base_url()}/verify/{verification_code}"
+    verification_qr_data_uri = generate_qr_png_data_uri(verification_url)
 
     html = build_report_html(
         report_title=report_title,
@@ -219,12 +304,33 @@ def compile_report(
         confidentiality_text=confidentiality_text,
         show_cover_page=show_cover_page,
         show_cvss_radar=show_cvss_radar,
+        show_toc=show_toc,
+        show_methodology=show_methodology,
+        show_poc_attachments=show_poc_attachments,
+        report_language=report_language,
+        methodology_framework=methodology_framework,
         remediations=remediations,
         report_version=report_version,
+        target_scope=scope_list,
+        engagement_period=engagement_period,
+        generated_date=generated_date,
+        verification_code=verification_code,
+        verification_url=verification_url,
+        verification_qr_data_uri=verification_qr_data_uri,
     )
     # If render_fn raises (EC-16: WeasyPrint OOM/PDF bomb), nothing below has
     # run yet — no Report row, no S3 upload, no quota decrement.
-    pdf_bytes = render_fn(html)
+    raw_pdf_bytes = render_fn(html)
+
+    is_free_tier = not is_paid_tier
+    if postprocess_fn is not None:
+        pdf_bytes, sha256_hash, is_rasterized, is_signed = postprocess_fn(
+            raw_pdf_bytes, is_free_tier
+        )
+    else:
+        pdf_bytes, sha256_hash, is_rasterized, is_signed = protect_report_pdf(
+            raw_pdf_bytes, is_free_tier=is_free_tier
+        )
 
     report = Report(
         project_id=project_id,
@@ -232,6 +338,10 @@ def compile_report(
         version=report_version,
         storage_path=f"reports/{project_id}/{uuid.uuid4()}.pdf",
         watermark_applied=watermark_text is not None,
+        sha256_hash=sha256_hash,
+        verification_code=verification_code,
+        is_rasterized=is_rasterized,
+        is_signed=is_signed,
     )
     db.add(report)
     db.flush()

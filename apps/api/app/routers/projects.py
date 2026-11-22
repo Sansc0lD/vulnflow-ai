@@ -15,6 +15,7 @@ from vulnflow_contracts import (
     AssignLeadRequest,
     ProjectCreateRequest,
     ProjectResponse,
+    ProjectTechStack,
     ProjectUpdateRequest,
 )
 
@@ -42,6 +43,11 @@ def _sanitize_scope_entries(entries: list[str]) -> list[str]:
 
 
 def _to_response(project: Project) -> ProjectResponse:
+    stack_obj = (
+        ProjectTechStack.model_validate(project.tech_stack)
+        if isinstance(project.tech_stack, dict) and project.tech_stack
+        else None
+    )
     return ProjectResponse(
         id=str(project.id),
         workspace_id=str(project.workspace_id),
@@ -53,6 +59,7 @@ def _to_response(project: Project) -> ProjectResponse:
         timezone=project.timezone,
         status=project.status,
         lead_pentester_id=str(project.lead_pentester_id) if project.lead_pentester_id else None,
+        tech_stack=stack_obj,
     )
 
 
@@ -64,6 +71,9 @@ def create_project(
     _member: WorkspaceMember = Depends(_require_creator_role),
 ) -> ProjectResponse:
     sanitized_scope = _sanitize_scope_entries(payload.target_scope)
+    stack_dict = (
+        payload.tech_stack.model_dump(exclude_none=True) if payload.tech_stack is not None else None
+    )
 
     project = Project(
         workspace_id=workspace_id,
@@ -73,6 +83,7 @@ def create_project(
         roe_start_date=payload.roe_start_date,
         roe_end_date=payload.roe_end_date,
         timezone=payload.timezone,
+        tech_stack=stack_dict or None,
     )
     db.add(project)
     db.commit()
@@ -142,6 +153,10 @@ def update_project(
     if payload.status is not None:
         project.status = payload.status
         updated_fields.append("status")
+    if payload.tech_stack is not None:
+        stack_dict = payload.tech_stack.model_dump(exclude_none=True)
+        project.tech_stack = stack_dict or None
+        updated_fields.append("tech_stack")
 
     record_audit_log(
         db,

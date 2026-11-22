@@ -2,11 +2,12 @@
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.base import Base
+from app.models.base import Base, JSONVariant
 
 
 class Project(Base):
@@ -35,3 +36,4 @@ class Project(Base):
     roe_end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     timezone: Mapped[str] = mapped_column(String(50), default="UTC", nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="ACTIVE", nullable=False)
+    tech_stack: Mapped[dict[str, Any] | None] = mapped_column(JSONVariant, nullable=True)

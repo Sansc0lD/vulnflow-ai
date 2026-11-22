@@ -1,0 +1,22 @@
+<section id="sec-toc" class="toc-section">
+    <h2>{{ labels.toc }}</h2>
+    <ul class="toc-list">
+        <li class="toc-item"><a class="toc-link" href="#sec-doc-control">{{ labels.doc_control }}</a></li>
+        <li class="toc-item"><a class="toc-link" href="#sec-exec">{{ labels.executive_summary }}</a></li>
+        <li class="toc-item"><a class="toc-link" href="#sec-impact">{{ labels.business_impact }}</a></li>
+        {% if show_methodology %}
+        <li class="toc-item"><a class="toc-link" href="#sec-methodology">{{ labels.methodology_and_scope }}</a></li>
+        {% endif %}
+        <li class="toc-item"><a class="toc-link" href="#sec-summary">{{ labels.findings_summary }}</a></li>
+        {% if remediations %}
+        <li class="toc-item"><a class="toc-link" href="#sec-remediation">{{ labels.remediation_priorities }}</a></li>
+        {% endif %}
+        <li class="toc-item"><a class="toc-link" href="#sec-details">{{ labels.technical_details }}</a></li>
+        {% for f in findings %}
+        <li class="toc-item-sub">
+            <a class="toc-link" href="#finding-{{ loop.index }}">{{ loop.index }}. [{{ f.severity }}] {{ f.title }}</a>
+        </li>
+        {% endfor %}
+        <li class="toc-item"><a class="toc-link" href="#sec-conclusion">{{ labels.conclusion_and_appendix }}</a></li>
+    </ul>
+</section>

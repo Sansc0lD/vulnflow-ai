@@ -38,8 +38,10 @@ app.include_router(triage.router)
 app.include_router(ai.router)
 app.include_router(reports.router)
 app.include_router(reports.workspace_reports_router)
+app.include_router(reports.public_reports_router)
 app.include_router(billing.router)
 app.include_router(billing.webhook_router)
+app.include_router(billing.public_enterprise_router)
 app.include_router(admin.router)
 
 _SECURITY_HEADERS = {
@@ -79,6 +81,7 @@ _HTTP_STATUS_CODE_MAP = {
     409: ErrorCode.CONFLICT,
     413: ErrorCode.PAYLOAD_TOO_LARGE,
     422: ErrorCode.VALIDATION_FAILED,
+    429: ErrorCode.QUOTA_EXHAUSTED,
 }
 
 

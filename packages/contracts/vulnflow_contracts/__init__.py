@@ -1,13 +1,18 @@
 """Shared Pydantic V2 data contracts for VulnFlow AI (SDD Bab 2.6.1)."""
 
 from vulnflow_contracts.admin_schemas import (
+    AdminSubscriptionOverrideRequest,
     AdminUserSummary,
+    AdminWorkspaceSubscriptionSummary,
     AITelemetryResponse,
     SpendCeilingUpdateRequest,
     SuspendUserRequest,
     WorkspaceTokenUsage,
 )
 from vulnflow_contracts.ai_schemas import (
+    AIJobStatus,
+    AINarrativeAcceptedResponse,
+    AINarrativeJobStatusResponse,
     AINarrativeRequest,
     AINarrativeResponse,
     NarrativeContent,
@@ -32,6 +37,10 @@ from vulnflow_contracts.auth_schemas import (
     WorkspaceRole,
 )
 from vulnflow_contracts.billing_schemas import (
+    EnterpriseInquiryCreateRequest,
+    EnterpriseInquiryResponse,
+    EnterpriseInquiryStatus,
+    EnterpriseInquiryUpdateRequest,
     MidtransCheckoutRequest,
     MidtransCheckoutResponse,
     MidtransTransactionStatus,
@@ -65,6 +74,7 @@ from vulnflow_contracts.finding_schemas import (
 from vulnflow_contracts.report_schemas import (
     CompilePDFAcceptedResponse,
     CompilePDFRequest,
+    PublicReportVerifyResponse,
     ReportDownloadResponse,
     ReportJobStatus,
     ReportJobStatusResponse,
@@ -85,6 +95,7 @@ from vulnflow_contracts.workspace_schemas import (
     PaginatedAuditLogResponse,
     ProjectCreateRequest,
     ProjectResponse,
+    ProjectTechStack,
     ProjectUpdateRequest,
     UpdateMemberRoleRequest,
     WorkspaceCreateRequest,
@@ -97,6 +108,9 @@ from vulnflow_contracts.workspace_schemas import (
 __version__ = "0.1.0"
 
 __all__ = [
+    "AIJobStatus",
+    "AINarrativeAcceptedResponse",
+    "AINarrativeJobStatusResponse",
     "AINarrativeRequest",
     "AINarrativeResponse",
     "AITelemetryResponse",
@@ -104,7 +118,9 @@ __all__ = [
     "APIKeyCreateResponse",
     "APIKeySummaryResponse",
     "AcceptInvitationRequest",
+    "AdminSubscriptionOverrideRequest",
     "AdminUserSummary",
+    "AdminWorkspaceSubscriptionSummary",
     "AssignLeadRequest",
     "AuditLogEntryResponse",
     "BatchIngestRequest",
@@ -113,6 +129,10 @@ __all__ = [
     "CompilePDFAcceptedResponse",
     "CompilePDFRequest",
     "DeleteAccountRequest",
+    "EnterpriseInquiryCreateRequest",
+    "EnterpriseInquiryResponse",
+    "EnterpriseInquiryStatus",
+    "EnterpriseInquiryUpdateRequest",
     "ErrorCode",
     "ErrorDetail",
     "FindingListItemResponse",
@@ -143,9 +163,11 @@ __all__ = [
     "PoCAttachmentResponse",
     "ProjectCreateRequest",
     "ProjectResponse",
+    "ProjectTechStack",
     "ProjectUpdateRequest",
     "ProofOfConceptSchema",
     "Protocol",
+    "PublicReportVerifyResponse",
     "RegisterRequest",
     "RegisterResponse",
     "RemediationItem",

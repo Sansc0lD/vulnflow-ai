@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -20,6 +21,11 @@ class ThemeOptions(BaseModel):
     secondary_color: str = Field(pattern=r"^#[0-9A-Fa-f]{6}$")
     show_cover_page: bool = True
     show_cvss_radar: bool = True
+    show_toc: bool = True
+    show_methodology: bool = True
+    show_poc_attachments: bool = True
+    report_language: Literal["en", "id"] = "en"
+    methodology_framework: str = Field(default="OWASP WSTG & PTES", max_length=120)
     confidentiality_notice: str = Field(default="", max_length=2000)
 
 
@@ -76,5 +82,23 @@ class ReportSummaryResponse(BaseModel):
     report_title: str
     version: str
     watermark_applied: bool
+    verification_code: str | None = None
+    sha256_hash: str | None = None
+    is_rasterized: bool = False
+    is_signed: bool = False
     generated_at: datetime
     download_url: str
+
+
+class PublicReportVerifyResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    valid: bool
+    verification_code: str
+    report_version: str | None = None
+    agency_name: str | None = None
+    generated_at: datetime | None = None
+    watermark_applied: bool = False
+    is_rasterized: bool = False
+    is_signed: bool = False
+    sha256_hash: str | None = None

@@ -203,8 +203,9 @@ def login(
             raise AuthenticationError("Invalid email, password, or authentication code.")
 
     memberships = (
-        db.query(WorkspaceMember, Workspace)
+        db.query(WorkspaceMember, Workspace, Subscription)
         .join(Workspace, Workspace.id == WorkspaceMember.workspace_id)
+        .outerjoin(Subscription, Subscription.workspace_id == Workspace.id)
         .filter(WorkspaceMember.user_id == user.id, Workspace.is_deleted.is_(False))
         .all()
     )
@@ -233,9 +234,12 @@ def login(
         ),
         workspaces=[
             WorkspaceMembership(
-                id=str(workspace.id), name=workspace.name, role=WorkspaceRole(member.role)
+                id=str(workspace.id),
+                name=workspace.name,
+                role=WorkspaceRole(member.role),
+                tier=sub.tier if sub is not None else None,
             )
-            for member, workspace in memberships
+            for member, workspace, sub in memberships
         ],
     )
 
@@ -256,8 +260,9 @@ def get_me(
     db: Session = Depends(get_db),
 ) -> MeResponse:
     memberships = (
-        db.query(WorkspaceMember, Workspace)
+        db.query(WorkspaceMember, Workspace, Subscription)
         .join(Workspace, Workspace.id == WorkspaceMember.workspace_id)
+        .outerjoin(Subscription, Subscription.workspace_id == Workspace.id)
         .filter(WorkspaceMember.user_id == current_user.id, Workspace.is_deleted.is_(False))
         .all()
     )
@@ -265,9 +270,12 @@ def get_me(
         user=_active_user_dto(current_user),
         workspaces=[
             WorkspaceMembership(
-                id=str(workspace.id), name=workspace.name, role=WorkspaceRole(member.role)
+                id=str(workspace.id),
+                name=workspace.name,
+                role=WorkspaceRole(member.role),
+                tier=sub.tier if sub is not None else None,
             )
-            for member, workspace in memberships
+            for member, workspace, sub in memberships
         ],
     )
 

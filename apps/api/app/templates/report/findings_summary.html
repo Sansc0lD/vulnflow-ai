@@ -1,0 +1,27 @@
+<section id="sec-summary">
+    <h2>{{ labels.findings_summary }}</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>{{ labels.title }}</th>
+                <th>{{ labels.severity }}</th>
+                <th>CVSS</th>
+                <th>CWE</th>
+                <th>{{ labels.target }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in findings %}
+            <tr>
+                <td><code>{{ loop.index }}</code></td>
+                <td><a class="summary-link" href="#finding-{{ loop.index }}">{{ f.title }}</a></td>
+                <td><span class="sev sev-{{ f.severity }}">{{ f.severity }}</span></td>
+                <td>{{ f.cvss_score }}</td>
+                <td>{{ f.cwe_id }}</td>
+                <td><code>{{ f.target_display }}</code></td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</section>

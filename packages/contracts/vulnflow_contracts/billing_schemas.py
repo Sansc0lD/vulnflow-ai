@@ -2,8 +2,11 @@
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from vulnflow_contracts.auth_schemas import NormalizedEmail
 
 
 class SubscriptionTier(StrEnum):
@@ -72,10 +75,51 @@ class SubscriptionStatusResponse(BaseModel):
     workspace_id: str
     tier: str
     status: str
-    monthly_report_quota: int = Field(ge=0)
+    monthly_report_quota: int = Field(ge=-1)
+    is_unlimited: bool = False
+    custom_batch_limit: int | None = None
     reports_used_this_month: int = Field(ge=0)
     remaining_reports: int = Field(ge=0)
     quota_reset_date: datetime
     payment_status: str
     payment_type: str | None = None
     midtrans_order_id: str | None = None
+
+
+EnterpriseInquiryStatus = Literal["NEW", "CONTACTED", "PROVISIONED", "DECLINED"]
+
+
+class EnterpriseInquiryCreateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    company_name: str = Field(min_length=1, max_length=150)
+    contact_name: str = Field(min_length=1, max_length=150)
+    contact_email: NormalizedEmail
+    team_size: str = Field(default="5-20", min_length=1, max_length=50)
+    estimated_monthly_reports: int | None = Field(default=None, ge=1, le=100_000)
+    requirements: str = Field(min_length=5, max_length=4000)
+
+
+class EnterpriseInquiryUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: EnterpriseInquiryStatus
+    admin_notes: str | None = Field(default=None, max_length=2000)
+
+
+class EnterpriseInquiryResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    workspace_id: str | None = None
+    submitted_by_user_id: str | None = None
+    company_name: str
+    contact_name: str
+    contact_email: str
+    team_size: str
+    estimated_monthly_reports: int | None = None
+    requirements: str
+    status: EnterpriseInquiryStatus
+    admin_notes: str | None = None
+    created_at: datetime
+    updated_at: datetime

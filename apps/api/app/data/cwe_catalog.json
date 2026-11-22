@@ -2,22 +2,50 @@
   "CWE-89": {
     "title": "SQL Injection",
     "business_impact": "An attacker can read, modify, or delete arbitrary data in the backing database, potentially exposing sensitive customer or financial records and undermining data integrity.",
-    "remediation": "Use parameterized queries or an ORM with bound parameters for all database access; never concatenate untrusted input into SQL strings. Apply least-privilege database accounts and validate/allowlist input where feasible."
+    "remediation": "Use parameterized queries or an ORM with bound parameters for all database access; never concatenate untrusted input into SQL strings. Apply least-privilege database accounts and validate/allowlist input where feasible.",
+    "stack_patterns": {
+      "fastapi": "In FastAPI/SQLAlchemy, always use bound ORM filters or `text('... WHERE id = :id').bindparams(id=val)` rather than f-strings inside raw SQL.",
+      "django": "Use Django ORM QuerySet methods (`Model.objects.filter(col=val)`) and pass `%s` params list to `cursor.execute(sql, [val])` when using raw cursors.",
+      "laravel": "Use Eloquent bindings or `DB::select('SELECT ... WHERE id = ?', [$id])` and avoid unescaped `DB::raw()` interpolation.",
+      "express": "Use prepared placeholders (`$1` in pg / `?` in mysql2) or parameterized Prisma/Knex builders instead of template literal SQL.",
+      "spring_boot": "Use Spring Data JPA derived queries or `@Query` named parameters (`:param`) / `JdbcTemplate` bind arguments.",
+      "gin": "Use `db.QueryContext(ctx, 'SELECT ... WHERE id = $1', id)` or GORM struct/placeholder conditions instead of `fmt.Sprintf`.",
+      "python": "Pass parameters as a tuple/dict second argument to DB-API `cursor.execute(query, params)` and never format SQL strings."
+    }
   },
   "CWE-79": {
     "title": "Cross-Site Scripting (XSS)",
     "business_impact": "An attacker can execute arbitrary script in a victim's browser session, enabling session hijacking, credential theft, or defacement of the application.",
-    "remediation": "Contextually encode/escape all untrusted output rendered in HTML, JS, or URL contexts. Apply a strict Content-Security-Policy and use templating engines with automatic output escaping enabled."
+    "remediation": "Contextually encode/escape all untrusted output rendered in HTML, JS, or URL contexts. Apply a strict Content-Security-Policy and use templating engines with automatic output escaping enabled.",
+    "stack_patterns": {
+      "fastapi": "Enable Jinja2 `select_autoescape(['html', 'xml'])` for HTML views and validate rich HTML server-side via nh3/bleach.",
+      "laravel": "Always output variables via Blade `{{ $var }}` instead of raw `{!! $var !!}`, and pair session cookies with `HttpOnly` + CSP.",
+      "express": "Avoid injecting unescaped HTML into `res.send(...)`; escape HTML contexts and enforce strict CSP headers via Helmet.",
+      "nextjs": "Rely on React JSX auto-escaping and sanitize any `dangerouslySetInnerHTML` payload with DOMPurify.",
+      "django": "Keep Django template autoescaping active and avoid marking user-controlled strings with `mark_safe()`."
+    }
   },
   "CWE-22": {
     "title": "Path Traversal",
     "business_impact": "An attacker can read or write files outside the intended directory, potentially exposing configuration secrets or achieving remote code execution.",
-    "remediation": "Resolve and canonicalize user-supplied paths, then verify they remain within an allowlisted base directory before use. Avoid passing raw user input directly to filesystem APIs."
+    "remediation": "Resolve and canonicalize user-supplied paths, then verify they remain within an allowlisted base directory before use. Avoid passing raw user input directly to filesystem APIs.",
+    "stack_patterns": {
+      "fastapi": "Use `Path(base_dir, safe_name).resolve().is_relative_to(base_dir.resolve())` or map opaque UUID keys rather than client filenames.",
+      "python": "Canonicalize via `Path.resolve()` and assert `.is_relative_to(BASE_DIR)` before opening files.",
+      "express": "Use `path.resolve(BASE_DIR, name)` and verify `resolved.startsWith(BASE_DIR + path.sep)` before `fs`/`res.sendFile` calls.",
+      "go": "Clean input with `filepath.Base` and confirm `strings.HasPrefix(cleanPath, baseDir+string(filepath.Separator))`."
+    }
   },
   "CWE-287": {
     "title": "Improper Authentication",
     "business_impact": "An attacker can bypass identity verification entirely, gaining unauthorized access to protected functionality or data.",
-    "remediation": "Enforce authentication on every protected endpoint via centralized middleware/guards rather than ad-hoc per-route checks. Use well-vetted authentication libraries and require strong credential/session validation."
+    "remediation": "Enforce authentication on every protected endpoint via centralized middleware/guards rather than ad-hoc per-route checks. Use well-vetted authentication libraries and require strong credential/session validation.",
+    "stack_patterns": {
+      "fastapi": "Apply `Depends(get_current_user)` on routers/endpoints, validate JWT `alg`, `exp`, and `token_version`, and avoid fallback unsigned tokens.",
+      "express": "Mount authentication middleware globally at the router prefix, pin JWT algorithms explicitly, and rotate session identifiers upon login.",
+      "laravel": "Enforce `auth:sanctum` or `auth` middleware on route groups and validate signed tokens consistently.",
+      "spring_boot": "Configure Spring Security `SecurityFilterChain` with default-deny `.anyRequest().authenticated()` and permit only explicit public paths."
+    }
   },
   "CWE-200": {
     "title": "Exposure of Sensitive Information",
@@ -52,17 +80,32 @@
   "CWE-352": {
     "title": "Cross-Site Request Forgery (CSRF)",
     "business_impact": "Authenticated users can be tricked into executing unintended state-changing actions (such as password changes or fund transfers) via malicious third-party sites.",
-    "remediation": "Protect state-changing cookie-authenticated endpoints with anti-CSRF synchronizer tokens, validate Origin/Referer headers, and configure SameSite=Lax or Strict cookies."
+    "remediation": "Protect state-changing cookie-authenticated endpoints with anti-CSRF synchronizer tokens, validate Origin/Referer headers, and configure SameSite=Lax or Strict cookies.",
+    "stack_patterns": {
+      "django": "Keep `CsrfViewMiddleware` enabled and never mark state-changing authenticated views with `@csrf_exempt`.",
+      "laravel": "Ensure `VerifyCsrfToken` covers all state-mutating routes using cookie sessions and include `@csrf` in forms.",
+      "express": "Bind anti-CSRF tokens for cookie-backed sessions, set `SameSite=Lax`/`Strict`, and check `Origin` headers."
+    }
   },
   "CWE-639": {
     "title": "Authorization Bypass Through User-Controlled Key (IDOR/BOLA)",
     "business_impact": "Authenticated attackers can manipulate object identifiers to read or alter records belonging to other tenants or users, causing severe privacy and compliance breaches.",
-    "remediation": "Verify tenant and object ownership server-side on every request using the authenticated user's session context rather than trusting client-supplied IDs."
+    "remediation": "Verify tenant and object ownership server-side on every request using the authenticated user's session context rather than trusting client-supplied IDs.",
+    "stack_patterns": {
+      "fastapi": "Scope every SQLAlchemy query with `.filter_by(id=resource_id, workspace_id=current_workspace.id)` rather than `db.get(Model, resource_id)` alone.",
+      "django": "Filter querysets by tenant/owner (`Model.objects.filter(id=pk, workspace=request.workspace)`) inside views and ViewSets.",
+      "laravel": "Register Laravel Policies and scope Eloquent route bindings to the authenticated tenant/workspace.",
+      "spring_boot": "Enforce `@PreAuthorize` ownership checks and tenant-scoped repository predicates on every resource lookup."
+    }
   },
   "CWE-693": {
     "title": "Protection Mechanism Failure",
     "business_impact": "Missing or misconfigured security headers (CSP, HSTS, X-Frame-Options) weaken browser-side defenses against clickjacking, MIME sniffing, and XSS.",
-    "remediation": "Configure strict Content-Security-Policy, Strict-Transport-Security, X-Content-Type-Options: nosniff, and X-Frame-Options: DENY across all HTTP responses."
+    "remediation": "Configure strict Content-Security-Policy, Strict-Transport-Security, X-Content-Type-Options: nosniff, and X-Frame-Options: DENY across all HTTP responses.",
+    "stack_patterns": {
+      "fastapi": "Attach a FastAPI middleware or reverse-proxy rules injecting CSP, HSTS, `X-Frame-Options: DENY`, and `X-Content-Type-Options: nosniff` on every response.",
+      "express": "Enable Helmet (`app.use(helmet())`) with strict explicit CSP directives and disable `X-Powered-By`."
+    }
   },
   "CWE-798": {
     "title": "Use of Hard-coded Credentials",
@@ -72,7 +115,12 @@
   "CWE-918": {
     "title": "Server-Side Request Forgery (SSRF)",
     "business_impact": "An attacker can coerce the server into probing internal services, localhost ports, or cloud metadata endpoints (e.g. 169.254.169.254) to steal IAM credentials.",
-    "remediation": "Resolve target DNS once, reject loopback/private/link-local/CGNAT IPs, restrict URI schemes to https, disable redirects, and connect directly to the validated IP."
+    "remediation": "Resolve target DNS once, reject loopback/private/link-local/CGNAT IPs, restrict URI schemes to https, disable redirects, and connect directly to the validated IP.",
+    "stack_patterns": {
+      "fastapi": "Validate resolved `ipaddress` values (`is_private`, `is_loopback`, `is_link_local`) before calling `httpx` with `follow_redirects=False`.",
+      "python": "Resolve hostnames via `socket.getaddrinfo`, reject reserved/private CIDRs, disable HTTP redirects, and pin connection timeouts.",
+      "go": "Implement a custom `net.Dialer.Control` callback verifying resolved IPs are public unicast before opening TCP sockets."
+    }
   },
   "UNKNOWN": {
     "title": "Unclassified Vulnerability",

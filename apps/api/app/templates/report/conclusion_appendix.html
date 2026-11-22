@@ -1,0 +1,61 @@
+<section id="sec-conclusion">
+    <h2>{{ labels.conclusion_and_appendix }}</h2>
+    <p>{{ labels.conclusion_body }}</p>
+    <table>
+        <tbody>
+            <tr>
+                <th>{{ labels.prepared_by }}</th>
+                <td>{{ agency_name }}</td>
+                <th>{{ labels.client }}</th>
+                <td>{{ client_name }}</td>
+            </tr>
+            <tr>
+                <th>{{ labels.report_version }}</th>
+                <td><code>{{ report_version }}</code></td>
+                <th>{{ labels.generated_date }}</th>
+                <td>{{ generated_date }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    {% if cwe_glossary %}
+    <h3>{{ labels.appendix_cwe }}</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>CWE ID</th>
+                <th>{{ labels.classification }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in cwe_glossary %}
+            <tr>
+                <td><code>{{ item.cwe_id }}</code></td>
+                <td>{{ item.title }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+
+    {% if verification_code %}
+    <div class="verify-card">
+        <table class="verify-table">
+            <tr>
+                {% if verification_qr_data_uri %}
+                <td style="width: 82px;">
+                    <img src="{{ verification_qr_data_uri }}" alt="Verification QR" class="verify-qr" />
+                </td>
+                {% endif %}
+                <td>
+                    <div><strong>{{ labels.authenticity_verification }}</strong></div>
+                    <div>{{ labels.verification_id }}: <code>{{ verification_code }}</code></div>
+                    {% if verification_url %}
+                    <div>{{ labels.verify_at }}: <code>{{ verification_url }}</code></div>
+                    {% endif %}
+                </td>
+            </tr>
+        </table>
+    </div>
+    {% endif %}
+</section>

@@ -1,0 +1,58 @@
+<section id="sec-methodology">
+    <h2>{{ labels.methodology_and_scope }}</h2>
+    <div class="scope-box">
+        <div><strong>{{ labels.framework }}:</strong> {{ methodology_framework }}</div>
+        {% if engagement_period %}
+        <div><strong>{{ labels.engagement_window }}:</strong> {{ engagement_period }}</div>
+        {% endif %}
+        <div><strong>{{ labels.authorized_scope }}:</strong></div>
+        <ul class="scope-chips">
+            {% for target in scope_entries %}
+            <li>{{ target }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <p>{{ labels.methodology_intro }}</p>
+    <table>
+        <thead>
+            <tr>
+                <th>{{ labels.severity }}</th>
+                <th>CVSS v3.1 Range</th>
+                <th>{{ labels.sla_target }}</th>
+                <th>{{ labels.count }}</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><span class="sev sev-CRITICAL">CRITICAL</span></td>
+                <td>9.0 - 10.0</td>
+                <td>Immediate (24 - 72 hours)</td>
+                <td><strong>{{ severity_counts.CRITICAL }}</strong></td>
+            </tr>
+            <tr>
+                <td><span class="sev sev-HIGH">HIGH</span></td>
+                <td>7.0 - 8.9</td>
+                <td>Short-term (7 - 14 days)</td>
+                <td><strong>{{ severity_counts.HIGH }}</strong></td>
+            </tr>
+            <tr>
+                <td><span class="sev sev-MEDIUM">MEDIUM</span></td>
+                <td>4.0 - 6.9</td>
+                <td>Scheduled (30 days)</td>
+                <td><strong>{{ severity_counts.MEDIUM }}</strong></td>
+            </tr>
+            <tr>
+                <td><span class="sev sev-LOW">LOW</span></td>
+                <td>0.1 - 3.9</td>
+                <td>Maintenance cycle (90 days)</td>
+                <td><strong>{{ severity_counts.LOW }}</strong></td>
+            </tr>
+            <tr>
+                <td><span class="sev sev-INFO">INFO</span></td>
+                <td>0.0</td>
+                <td>Hardening / Advisory</td>
+                <td><strong>{{ severity_counts.INFO }}</strong></td>
+            </tr>
+        </tbody>
+    </table>
+</section>

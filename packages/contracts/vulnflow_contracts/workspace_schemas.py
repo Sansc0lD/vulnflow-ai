@@ -104,6 +104,47 @@ class APIKeyCreateResponse(BaseModel):
     api_key: str
 
 
+class ProjectTechStack(BaseModel):
+    """Strictly enumerated architecture tags for Zero-PoC stack-aware remediation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    language: (
+        Literal[
+            "python",
+            "typescript",
+            "javascript",
+            "go",
+            "java",
+            "php",
+            "csharp",
+            "ruby",
+            "other",
+        ]
+        | None
+    ) = None
+    framework: (
+        Literal[
+            "fastapi",
+            "django",
+            "flask",
+            "express",
+            "nestjs",
+            "nextjs",
+            "laravel",
+            "spring_boot",
+            "aspnet",
+            "rails",
+            "gin",
+            "other",
+        ]
+        | None
+    ) = None
+    database: (
+        Literal["postgresql", "mysql", "mongodb", "mssql", "sqlite", "redis", "other"] | None
+    ) = None
+
+
 class ProjectCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -113,6 +154,7 @@ class ProjectCreateRequest(BaseModel):
     roe_start_date: datetime
     roe_end_date: datetime
     timezone: str = Field(default="UTC", max_length=50)
+    tech_stack: ProjectTechStack | None = None
 
     @field_validator("timezone")
     @classmethod
@@ -160,6 +202,7 @@ class ProjectResponse(BaseModel):
     timezone: str
     status: str
     lead_pentester_id: str | None = None
+    tech_stack: ProjectTechStack | None = None
 
 
 class AssignLeadRequest(BaseModel):
@@ -203,6 +246,7 @@ class ProjectUpdateRequest(BaseModel):
     roe_end_date: datetime | None = None
     timezone: str | None = Field(default=None, max_length=50)
     status: Literal["ACTIVE", "ARCHIVED"] | None = None
+    tech_stack: ProjectTechStack | None = None
 
     @field_validator("timezone")
     @classmethod

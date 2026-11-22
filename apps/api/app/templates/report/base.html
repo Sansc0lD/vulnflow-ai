@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm 18mm 22mm 18mm;
+            @top-left {
+                content: "{{ report_title_css }}";
+                font-size: 8pt;
+                color: #64748b;
+            }
+            @top-right {
+                content: "{{ top_right_tag_css }}";
+                font-size: 8pt;
+                color: #64748b;
+            }
+            @bottom-right {
+                content: "{{ page_label_css }} " counter(page) " / " counter(pages);
+                font-size: 8.5pt;
+                color: #64748b;
+            }
+            @bottom-left {
+                content: "{{ agency_name_css }} · {{ report_version_css }}{{ verify_footer_css }}";
+                font-size: 8.5pt;
+                color: #64748b;
+            }
+        }
+        @page cover {
+            size: A4;
+            margin: 0;
+            @top-left { content: none; }
+            @top-right { content: none; }
+            @bottom-left { content: none; }
+            @bottom-right { content: none; }
+        }
+        @page toc_page {
+            size: A4;
+            margin: 20mm 18mm 22mm 18mm;
+        }
+        body {
+            font-family: sans-serif;
+            color: #1e293b;
+            font-size: 10pt;
+            line-height: 1.5;
+            margin: 0;
+        }
+        h1, h2, h3 { color: {{ safe_primary }}; }
+        h1 { font-size: 20pt; margin: 0 0 6px 0; }
+        h2 {
+            border-bottom: 2px solid {{ safe_secondary }};
+            padding-bottom: 4px;
+            margin-top: 22px;
+            font-size: 13pt;
+            page-break-after: avoid;
+            break-after: avoid;
+        }
+        h3 { font-size: 10.5pt; margin: 14px 0 6px 0; }
+        .section-break { page-break-before: always; break-before: page; }
+        .doc-header-sub { font-size: 9.5pt; color: #475569; margin: 0 0 14px 0; }
+        .narrative-text { white-space: pre-line; margin: 8px 0 14px 0; }
+        .watermark {
+            position: fixed;
+            top: 42%;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            transform: rotate(-45deg);
+            transform-origin: center;
+            font-size: 46pt;
+            font-weight: bold;
+            color: rgba(220, 38, 38, 0.16);
+            z-index: 9999;
+            pointer-events: none;
+            text-transform: uppercase;
+            letter-spacing: 6px;
+        }
+        .cover {
+            page: cover;
+            width: 210mm;
+            height: 297mm;
+            box-sizing: border-box;
+            margin: 0;
+            padding: 22mm 22mm 20mm 26mm;
+            border-radius: 0;
+            border-left: 7mm solid {{ safe_secondary }};
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            page-break-after: always;
+            break-after: page;
+            overflow: hidden;
+        }
+        .cover table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 0;
+            table-layout: fixed;
+        }
+        .cover table td {
+            border: none;
+            padding: 0;
+            background: transparent;
+            color: inherit;
+        }
+        .cover-top {
+            border-bottom: 1px solid {{ cover_divider }};
+            padding-bottom: 14px;
+        }
+        .cover-brand-cell { vertical-align: middle; }
+        .cover-tag-cell { text-align: right; vertical-align: middle; width: 42%; }
+        .cover-logo {
+            max-height: 44px;
+            max-width: 170px;
+            margin-bottom: 6px;
+            display: block;
+        }
+        .cover-agency { font-size: 13pt; font-weight: bold; }
+        .cover-doc-sub { font-size: 8.5pt; opacity: 0.78; margin-top: 2px; }
+        .cover-tier-tag {
+            display: inline-block;
+            white-space: nowrap;
+            font-family: monospace;
+            font-size: 8pt;
+            letter-spacing: 0.8px;
+            padding: 4px 10px;
+            border: 1px solid {{ cover_divider }};
+            text-transform: uppercase;
+        }
+        .cover-body { margin: auto 0; padding: 14mm 0; }
+        .cover-badge {
+            display: inline-block;
+            white-space: nowrap;
+            padding: 5px 12px;
+            border-radius: 0;
+            font-size: 8.5pt;
+            font-weight: bold;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+        }
+        .cover-title {
+            font-size: 27pt;
+            line-height: 1.15;
+            font-weight: bold;
+            margin: 16px 0 10px 0;
+            color: inherit;
+        }
+        .cover-client { font-size: 11.5pt; margin: 0; opacity: 0.92; }
+        .cover-meta-table {
+            margin-top: 24px !important;
+            border-top: 1px solid {{ cover_divider }};
+            border-bottom: 1px solid {{ cover_divider }};
+        }
+        .cover-meta-cell {
+            padding: 10px 12px 10px 0 !important;
+            vertical-align: top;
+            border-bottom: 1px solid {{ cover_divider }} !important;
+        }
+        .cover-meta-table tr:last-child .cover-meta-cell { border-bottom: none !important; }
+        .cover-meta-label {
+            font-family: monospace;
+            font-size: 7.5pt;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            opacity: 0.72;
+            margin-bottom: 3px;
+        }
+        .cover-meta-val { font-size: 9.5pt; font-weight: bold; word-break: break-word; }
+        .cover-mono { font-family: monospace; font-weight: normal; font-size: 9pt; }
+        .cover-footer {
+            border-top: 1px solid {{ cover_divider }};
+            padding-top: 14px;
+        }
+        .nda-box {
+            padding: 10px 12px;
+            border: 1px solid {{ cover_divider }};
+            background-color: {{ cover_surface }};
+            font-size: 8.5pt;
+            line-height: 1.45;
+            margin-bottom: 12px;
+        }
+        .cover-footer-left { font-family: monospace; font-size: 8pt; opacity: 0.8; }
+        .cover-footer-right {
+            font-family: monospace;
+            font-size: 8pt;
+            opacity: 0.8;
+            text-align: right;
+        }
+        .toc-section { page: toc_page; }
+        .toc-list { list-style: none; padding: 0; margin: 12px 0; }
+        .toc-item { margin: 6px 0; font-size: 9.5pt; }
+        .toc-item-sub { margin: 4px 0 4px 18px; font-size: 9pt; color: #334155; }
+        .toc-link {
+            text-decoration: none;
+            color: #0f172a;
+            display: flex;
+            align-items: baseline;
+        }
+        .toc-link::after {
+            content: leader('.') target-counter(attr(href), page);
+            flex: 1;
+            margin-left: 8px;
+            font-family: monospace;
+            font-size: 9pt;
+            color: #475569;
+            text-align: right;
+        }
+        .scope-box {
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            padding: 10px 12px;
+            margin: 10px 0;
+            font-size: 9pt;
+        }
+        .scope-chips { margin: 6px 0 0 0; padding: 0; list-style: none; }
+        .scope-chips li {
+            display: inline-block;
+            font-family: monospace;
+            font-size: 8pt;
+            padding: 2px 6px;
+            margin: 2px 4px 2px 0;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+        }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 9pt; }
+        th, td {
+            border: 1px solid #cbd5e1;
+            padding: 6px 8px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th { background-color: {{ safe_primary }}; color: {{ cover_text_color }}; }
+        table.radar-layout { border: none; margin-top: 8px; }
+        table.radar-layout > tbody > tr > td {
+            border: none;
+            padding: 0;
+            vertical-align: middle;
+        }
+        td.radar-cell { width: 225px; text-align: center; }
+        td.radar-metrics { padding-left: 14px !important; }
+        .sev { padding: 2px 6px; border-radius: 0; font-weight: bold; font-size: 8pt; }
+        .sev-CRITICAL { background: #fee2e2; color: #991b1b; }
+        .sev-HIGH { background: #ffedd5; color: #9a3412; }
+        .sev-MEDIUM { background: #fef9c3; color: #854d0e; }
+        .sev-LOW { background: #dcfce7; color: #166534; }
+        .sev-INFO { background: #dbeafe; color: #1e40af; }
+        .summary-link { color: {{ safe_primary }}; text-decoration: none; font-weight: 600; }
+        .finding-card {
+            border: 1px solid #cbd5e1;
+            border-radius: 0;
+            padding: 10px 12px;
+            margin-top: 12px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+        .finding-head { font-size: 10.5pt; margin-bottom: 4px; }
+        .finding-meta { font-size: 8.5pt; color: #475569; margin: 4px 0 8px 0; }
+        pre.poc {
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 8px;
+            border-radius: 0;
+            font-size: 8pt;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .poc-gallery { margin-top: 8px; }
+        .poc-figure {
+            margin: 6px 0;
+            border: 1px solid #cbd5e1;
+            padding: 6px;
+            background: #f8fafc;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+        .poc-img { max-width: 100%; max-height: 220px; display: block; }
+        .poc-caption { font-family: monospace; font-size: 7.5pt; color: #475569; margin-top: 4px; }
+        .verify-card {
+            margin-top: 16px;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            padding: 10px 12px;
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+        .verify-table td { border: none; padding: 2px 6px; vertical-align: middle; }
+        .verify-qr { width: 72px; height: 72px; display: block; }
+    </style>
+</head>
+<body>
+    {% if watermark_text %}
+    <div class="watermark">{{ watermark_text }}</div>
+    {% endif %}
+
+    {% if show_cover_page %}
+    {% include "cover.html" %}
+    {% endif %}
+
+    <h1>{{ report_title }}</h1>
+    <p class="doc-header-sub">{{ labels.client }}: {{ client_name }} · {{ labels.version }}: {{ report_version }} · {{ generated_date }}</p>
+
+    {% include "doc_control.html" %}
+
+    {% if show_toc %}
+    {% include "toc.html" %}
+    {% endif %}
+
+    {% include "executive.html" %}
+
+    {% if show_methodology %}
+    {% include "scope_methodology.html" %}
+    {% endif %}
+
+    {% include "findings_summary.html" %}
+
+    {% include "remediation_roadmap.html" %}
+
+    {% include "findings_detail.html" %}
+
+    {% include "conclusion_appendix.html" %}
+</body>
+</html>

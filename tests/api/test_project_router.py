@@ -122,8 +122,14 @@ def test_assign_lead_pentester(db_session: Session) -> None:
 
 
 def test_list_projects_returns_only_this_workspaces_projects(db_session: Session) -> None:
+    from app.models.subscription import Subscription
+
     with TestClient(app) as client:
         token, workspace_id = _register_and_get_token(client)
+        sub = db_session.query(Subscription).filter_by(workspace_id=uuid.UUID(workspace_id)).one()
+        sub.tier = "PRO"
+        db_session.commit()
+
         client.post(
             f"/api/v1/workspaces/{workspace_id}/projects",
             json=_VALID_PROJECT,

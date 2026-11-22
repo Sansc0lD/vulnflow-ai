@@ -56,7 +56,7 @@ def main() -> None:
         if len(sys.argv) > 1
         else ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]  # nosec: B104
     )
-    if "uvicorn" in raw_cmd[0]:
+    if raw_cmd[0] in {"uvicorn", "gunicorn"} or "uvicorn" in raw_cmd[0]:
         _run_migrations()
 
     target = raw_cmd[0]

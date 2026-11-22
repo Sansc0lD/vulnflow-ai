@@ -1,0 +1,10 @@
+{% if remediations %}
+<section id="sec-remediation">
+    <h2>{{ labels.remediation_priorities }}</h2>
+    <ul>
+        {% for rem in remediations %}
+        <li><strong>{{ rem.cwe_id }} - {{ rem.vuln_title }}:</strong> {{ rem.remediation_guidance }}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}

@@ -133,3 +133,33 @@ def test_wcag_contrast_and_rich_sections() -> None:
     )
     assert "CVSS v3.1 Risk Profile Radar" not in html_no_radar
     assert "<svg" not in html_no_radar
+
+
+def test_cover_page_uses_full_bleed_named_page_and_metadata() -> None:
+    html = build_report_html(
+        report_title="Core Banking Q4 Assessment",
+        client_name="Bank Nusantara",
+        findings=[
+            {"title": "SQLi", "severity": "CRITICAL", "cvss_score": 9.8, "cwe_id": "CWE-89"},
+            {"title": "XSS", "severity": "HIGH", "cvss_score": 7.4, "cwe_id": "CWE-79"},
+            {"title": "TLS", "severity": "LOW", "cvss_score": 3.1, "cwe_id": "CWE-326"},
+        ],
+        executive_summary="Exec summary.",
+        business_impact="Business impact.",
+        watermark_text="FREE TIER PREVIEW",
+        target_scope=["api.bank.local", "auth.bank.local", "10.0.0.0/24", "portal.bank.local"],
+        engagement_period="01 Nov 2026 - 15 Nov 2026 (Asia/Jakarta)",
+        generated_date="22 Nov 2026",
+        show_cvss_radar=False,
+    )
+
+    assert "@page cover" in html
+    assert "page: cover;" in html
+    assert "height: 297mm;" in html
+    assert "white-space: nowrap;" in html
+    assert "api.bank.local, auth.bank.local, 10.0.0.0/24 (+1 more)" in html
+    assert "01 Nov 2026 - 15 Nov 2026 (Asia/Jakarta)" in html
+    assert "22 Nov 2026" in html
+    assert "cover-sev-table" not in html
+    assert "cover-sev-count" not in html
+    assert "<svg" not in html

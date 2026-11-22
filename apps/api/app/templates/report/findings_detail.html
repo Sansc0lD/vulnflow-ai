@@ -1,0 +1,48 @@
+<section id="sec-details">
+    <h2>{{ labels.technical_details }}</h2>
+    {% for f in findings %}
+    <div class="finding-card" id="finding-{{ loop.index }}">
+        <div class="finding-head">
+            <strong>{{ loop.index }}. {{ f.title }}</strong>
+            <span class="sev sev-{{ f.severity }}">{{ f.severity }}</span>
+            (CVSS {{ f.cvss_score }})
+        </div>
+        <div class="finding-meta">
+            <span>CWE: <code>{{ f.cwe_id }}</code></span> ·
+            <span>Host: <code>{{ f.host_display }}</code></span> ·
+            <span>Port: <code>{{ f.port_display }}</code></span> ·
+            <span>Path: <code>{{ f.path_display }}</code></span>
+        </div>
+        {% if f.cvss_vector %}
+        <div><strong>CVSS Vector:</strong> <code>{{ f.cvss_vector }}</code></div>
+        {% endif %}
+        {% if f.reproduction_steps %}
+        <div>
+            <strong>{{ labels.reproduction_steps }}</strong>
+            <ol>
+                {% for step in f.reproduction_steps %}
+                <li>{{ step }}</li>
+                {% endfor %}
+            </ol>
+        </div>
+        {% endif %}
+        {% if f.raw_evidence %}
+        <div>
+            <strong>{{ labels.technical_evidence }}</strong>
+            <pre class="poc">{{ f.raw_evidence }}</pre>
+        </div>
+        {% endif %}
+        {% if show_poc_attachments and f.poc_attachments %}
+        <div class="poc-gallery">
+            <strong>{{ labels.poc_screenshots }}</strong>
+            {% for att in f.poc_attachments %}
+            <figure class="poc-figure">
+                <img src="{{ att.data_uri }}" alt="{{ att.label }}" class="poc-img" />
+                <figcaption class="poc-caption">{{ att.label }}</figcaption>
+            </figure>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</section>

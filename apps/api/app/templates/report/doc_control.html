@@ -1,0 +1,26 @@
+<section id="sec-doc-control">
+    <h2>{{ labels.doc_control }}</h2>
+    <table>
+        <tbody>
+            <tr>
+                <th>{{ labels.document_title }}</th>
+                <td>{{ report_title }}</td>
+                <th>{{ labels.version }}</th>
+                <td><code>{{ report_version }}</code></td>
+            </tr>
+            <tr>
+                <th>{{ labels.client }}</th>
+                <td>{{ client_name }}</td>
+                <th>{{ labels.prepared_by }}</th>
+                <td>{{ agency_name }}</td>
+            </tr>
+            <tr>
+                <th>{{ labels.classification }}</th>
+                <td>{{ cover_top_tag }}</td>
+                <th>{{ labels.generated_date }}</th>
+                <td>{{ generated_date }}</td>
+            </tr>
+        </tbody>
+    </table>
+    <p class="scope-box"><strong>{{ labels.confidentiality_statement }}:</strong> {{ nda_copy }}</p>
+</section>

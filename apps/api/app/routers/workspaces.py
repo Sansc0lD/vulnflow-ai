@@ -67,6 +67,7 @@ router = APIRouter(prefix="/api/v1/workspaces", tags=["workspaces"])
 
 FREE_TIER_MONTHLY_REPORT_QUOTA = 3
 MAX_WORKSPACES_PER_USER = 5
+MAX_FREE_WORKSPACES_PER_USER = 1
 MAX_ACTIVE_API_KEYS_PER_USER = 5
 _INVITATION_EXPIRES_IN_SECONDS = 7 * 24 * 3600
 
@@ -165,10 +166,12 @@ def accept_invitation(
         exp = int(invite.get("exp", int(time.time()) + _INVITATION_EXPIRES_IN_SECONDS))
         mark_invitation_used(str(jti), exp)
 
+    sub = db.query(Subscription).filter_by(workspace_id=workspace.id).one_or_none()
     return WorkspaceMembership(
         id=str(workspace.id),
         name=workspace.name,
         role=WorkspaceRole(role),
+        tier=sub.tier if sub is not None else None,
     )
 
 
@@ -179,7 +182,26 @@ def create_workspace(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> WorkspaceResponse:
-    # F4-LOW-15: limit workspace creation to prevent quota abuse
+    # Enforce max 1 owned FREE workspace per user (upgrade existing workspaces to unlock more).
+    free_manager_workspaces_count = (
+        db.query(WorkspaceMember)
+        .join(Workspace, Workspace.id == WorkspaceMember.workspace_id)
+        .join(Subscription, Subscription.workspace_id == Workspace.id)
+        .filter(
+            WorkspaceMember.user_id == current_user.id,
+            WorkspaceMember.role == "MANAGER",
+            Workspace.is_deleted.is_(False),
+            Subscription.tier == "FREE",
+        )
+        .count()
+    )
+    if free_manager_workspaces_count >= MAX_FREE_WORKSPACES_PER_USER:
+        raise ValidationFailedError(
+            "You already own a Free-tier workspace. Upgrade an existing workspace "
+            "to Pro or Enterprise before creating another."
+        )
+
+    # F4-LOW-15: limit total owned workspaces to prevent quota abuse
     manager_workspaces_count = (
         db.query(WorkspaceMember)
         .join(Workspace, Workspace.id == WorkspaceMember.workspace_id)

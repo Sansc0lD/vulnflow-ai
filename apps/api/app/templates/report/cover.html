@@ -1,0 +1,75 @@
+<section class="cover" style="background-color: {{ safe_primary }}; color: {{ cover_text_color }};">
+    <div class="cover-top">
+        <table class="cover-top-table">
+            <tr>
+                <td class="cover-brand-cell">
+                    {% if logo_url %}
+                    <img src="{{ logo_url }}" alt="Agency Logo" class="cover-logo" />
+                    {% endif %}
+                    <div class="cover-agency">{{ agency_name }}</div>
+                    <div class="cover-doc-sub">{{ labels.confidential_deliverable }}</div>
+                </td>
+                <td class="cover-tag-cell">
+                    <span class="cover-tier-tag">{{ cover_top_tag }}</span>
+                </td>
+            </tr>
+        </table>
+    </div>
+    <div class="cover-body">
+        <div class="cover-badge" style="background-color: {{ safe_secondary }}; color: {{ accent_text_color }};">
+            SECURITY ASSESSMENT REPORT ({{ report_version }})
+        </div>
+        <h1 class="cover-title">{{ report_title }}</h1>
+        <p class="cover-client">{{ labels.prepared_for }}: <strong>{{ client_name }}</strong></p>
+        <table class="cover-meta-table">
+            <tr>
+                <td class="cover-meta-cell">
+                    <div class="cover-meta-label">{{ labels.client }}</div>
+                    <div class="cover-meta-val">{{ client_name }}</div>
+                </td>
+                <td class="cover-meta-cell">
+                    <div class="cover-meta-label">{{ labels.prepared_by }}</div>
+                    <div class="cover-meta-val">{{ agency_name }}</div>
+                </td>
+            </tr>
+            <tr>
+                <td class="cover-meta-cell">
+                    <div class="cover-meta-label">{{ labels.report_version }}</div>
+                    <div class="cover-meta-val cover-mono">{{ report_version }}</div>
+                </td>
+                <td class="cover-meta-cell">
+                    <div class="cover-meta-label">{{ labels.generated_date }}</div>
+                    <div class="cover-meta-val cover-mono">{{ generated_date }}</div>
+                </td>
+            </tr>
+            <tr>
+                {% if engagement_period %}
+                <td class="cover-meta-cell">
+                    <div class="cover-meta-label">{{ labels.engagement_window }}</div>
+                    <div class="cover-meta-val">{{ engagement_period }}</div>
+                </td>
+                <td class="cover-meta-cell">
+                    <div class="cover-meta-label">{{ labels.authorized_scope }}</div>
+                    <div class="cover-meta-val cover-mono">{{ scope_summary }}</div>
+                </td>
+                {% else %}
+                <td colspan="2" class="cover-meta-cell">
+                    <div class="cover-meta-label">{{ labels.authorized_scope }}</div>
+                    <div class="cover-meta-val cover-mono">{{ scope_summary }}</div>
+                </td>
+                {% endif %}
+            </tr>
+        </table>
+    </div>
+    <div class="cover-footer">
+        <div class="nda-box">{{ nda_copy }}</div>
+        <table class="cover-footer-table">
+            <tr>
+                <td class="cover-footer-left">{{ agency_name }}{% if verification_code %} · ID {{ verification_code }}{% endif %}</td>
+                <td class="cover-footer-right">
+                    Security Assessment Report · {{ report_version }}
+                </td>
+            </tr>
+        </table>
+    </div>
+</section>

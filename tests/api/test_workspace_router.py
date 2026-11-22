@@ -27,8 +27,16 @@ def _auth_headers(token: str) -> dict[str, str]:
 
 
 def test_create_workspace_makes_caller_manager(db_session: Session) -> None:
+    from app.models.subscription import Subscription
+
     with TestClient(app) as client:
-        token, _ = _register_and_get_token(client)
+        token, first_ws_id = _register_and_get_token(client)
+        first_sub = (
+            db_session.query(Subscription).filter_by(workspace_id=uuid.UUID(first_ws_id)).one()
+        )
+        first_sub.tier = "PRO"
+        db_session.commit()
+
         response = client.post(
             "/api/v1/workspaces", json={"name": "Agensi Kedua"}, headers=_auth_headers(token)
         )
@@ -37,6 +45,62 @@ def test_create_workspace_makes_caller_manager(db_session: Session) -> None:
     workspace_id = uuid.UUID(response.json()["id"])
     member = db_session.query(WorkspaceMember).filter_by(workspace_id=workspace_id).one()
     assert member.role == "MANAGER"
+
+
+def test_create_workspace_rejects_second_free_workspace(db_session: Session) -> None:
+    with TestClient(app) as client:
+        token, _ = _register_and_get_token(client)
+        resp = client.post(
+            "/api/v1/workspaces",
+            json={"name": "Second Free WS"},
+            headers=_auth_headers(token),
+        )
+
+    assert resp.status_code == 422
+    assert resp.json()["code"] == "VALIDATION_FAILED"
+    assert "Free-tier workspace" in resp.json()["message"]
+
+
+def test_invited_viewer_can_create_one_personal_free_workspace(db_session: Session) -> None:
+    with TestClient(app) as client:
+        mgr_token, ws_id = _register_and_get_token(client)
+        invite_resp = client.post(
+            f"/api/v1/workspaces/{ws_id}/members",
+            json={"email": "viewer-creator@example.com", "role": "VIEWER"},
+            headers=_auth_headers(mgr_token),
+        )
+        inv_token = invite_resp.json()["invitation_token"]
+        viewer_reg = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "viewer-creator@example.com",
+                "password": "Str0ng!Passw0rd",
+                "full_name": "Viewer Creator",
+                "workspace_name": "Unused",
+                "invitation_token": inv_token,
+            },
+        )
+        viewer_token = viewer_reg.json()["access_token"]
+
+        # 1st personal FREE workspace succeeds with MANAGER role; original workspace stays VIEWER
+        created = client.post(
+            "/api/v1/workspaces",
+            json={"name": "Viewer Personal Lab"},
+            headers=_auth_headers(viewer_token),
+        )
+        assert created.status_code == 201
+        created_ws_id = uuid.UUID(created.json()["id"])
+        membership = db_session.query(WorkspaceMember).filter_by(workspace_id=created_ws_id).one()
+        assert membership.role == "MANAGER"
+
+        # 2nd personal FREE workspace is rejected
+        second = client.post(
+            "/api/v1/workspaces",
+            json={"name": "Viewer Second Free"},
+            headers=_auth_headers(viewer_token),
+        )
+        assert second.status_code == 422
+        assert "Free-tier workspace" in second.json()["message"]
 
 
 def test_create_workspace_requires_authentication(db_session: Session) -> None:
@@ -152,9 +216,15 @@ def test_workspace_not_found_returns_404(db_session: Session) -> None:
 
 
 def test_create_workspace_enforces_limit_per_user(db_session: Session) -> None:
-    # F4-LOW-15: Maximum 5 workspaces per user
+    # F4-LOW-15: Maximum 5 owned workspaces per user (after upgrading prior FREE workspaces)
+    from app.models.subscription import Subscription
+
     with TestClient(app) as client:
-        token, _ = _register_and_get_token(client)
+        token, first_ws_id = _register_and_get_token(client)
+        sub = db_session.query(Subscription).filter_by(workspace_id=uuid.UUID(first_ws_id)).one()
+        sub.tier = "PRO"
+        db_session.commit()
+
         # 1st workspace already created at register. Create 4 more -> total 5
         for i in range(2, 6):
             resp = client.post(
@@ -163,6 +233,10 @@ def test_create_workspace_enforces_limit_per_user(db_session: Session) -> None:
                 headers=_auth_headers(token),
             )
             assert resp.status_code == 201
+            created_id = uuid.UUID(resp.json()["id"])
+            created_sub = db_session.query(Subscription).filter_by(workspace_id=created_id).one()
+            created_sub.tier = "PRO"
+            db_session.commit()
 
         # 6th workspace attempt must be rejected
         overflow_resp = client.post(

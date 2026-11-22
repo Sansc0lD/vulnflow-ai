@@ -136,3 +136,45 @@ def send_password_reset_email(
     return sender.send_email(
         to_email=to_email, subject=subject, html_body=html_body, text_body=text_body
     )
+
+
+def send_enterprise_inquiry_notification(
+    sender: EmailSender,
+    *,
+    inquiry_id: str,
+    company_name: str,
+    contact_name: str,
+    contact_email: str,
+    team_size: str,
+    estimated_monthly_reports: int | None,
+    requirements: str,
+    workspace_id: str | None = None,
+) -> bool:
+    sales_email = os.environ.get("SALES_NOTIFICATION_EMAIL", "sales@vulnflow.local")
+    subject = f"[VulnFlow Enterprise Inquiry] {company_name} ({contact_name})"
+    reports_label = (
+        str(estimated_monthly_reports) if estimated_monthly_reports is not None else "Not specified"
+    )
+    ws_label = workspace_id or "Public prospect (no workspace yet)"
+    text_body = (
+        f"New Enterprise Inquiry #{inquiry_id}\n\n"
+        f"Company: {company_name}\n"
+        f"Contact: {contact_name} <{contact_email}>\n"
+        f"Team size: {team_size}\n"
+        f"Est. monthly reports: {reports_label}\n"
+        f"Workspace ID: {ws_label}\n\n"
+        f"Requirements:\n{requirements}\n"
+    )
+    html_body = (
+        f"<h2>New Enterprise Inquiry ({escape(company_name)})</h2>"
+        f"<p><strong>Inquiry ID:</strong> <code>{escape(inquiry_id)}</code></p>"
+        f"<p><strong>Contact:</strong> {escape(contact_name)} "
+        f"(&lt;{escape(contact_email)}&gt;)</p>"
+        f"<p><strong>Team size:</strong> {escape(team_size)}<br/>"
+        f"<strong>Est. monthly reports:</strong> {escape(reports_label)}<br/>"
+        f"<strong>Workspace ID:</strong> <code>{escape(ws_label)}</code></p>"
+        f"<h3>Requirements</h3><pre>{escape(requirements)}</pre>"
+    )
+    return sender.send_email(
+        to_email=sales_email, subject=subject, html_body=html_body, text_body=text_body
+    )

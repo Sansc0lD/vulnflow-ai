@@ -1,0 +1,13 @@
+<section id="sec-exec">
+    <h2>{{ labels.executive_summary }}</h2>
+    <p class="narrative-text">{{ executive_summary }}</p>
+</section>
+
+<section id="sec-impact">
+    <h2>{{ labels.business_impact }}</h2>
+    <p class="narrative-text">{{ business_impact }}</p>
+</section>
+
+{% if show_cvss_radar and cvss_radar_html %}
+{{ cvss_radar_html | safe }}
+{% endif %}
