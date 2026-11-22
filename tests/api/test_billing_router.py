@@ -56,6 +56,8 @@ def test_checkout_returns_snap_token_and_persists_order(
 
     assert response.status_code == 200
     body = response.json()
+    assert body["order_id"].startswith("ORD-")
+    assert len(body["order_id"]) <= 50
     assert body["snap_token"] == "snap-token-xyz"
     assert body["gross_amount"] == 750000
 

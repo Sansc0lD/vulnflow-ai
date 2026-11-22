@@ -13,7 +13,11 @@ members = ["apps/api", "apps/cli", "packages/contracts"]
 # 1.2.0 has 2 known CVEs (PYSEC-2026-4322, GHSA-9v8h-qqgm-4m35) per
 # pip-audit; force the resolver to the fixed version without adding it as a
 # direct dependency anywhere.
-constraint-dependencies = ["brotli>=1.2.1"]
+constraint-dependencies = [
+    "brotli>=1.2.1",
+    "dnspython>=2.9.2",
+    "opentelemetry-api>=1.45.2",
+]
 
 [dependency-groups]
 dev = [
@@ -85,7 +89,7 @@ warn_required_dynamic_aliases = true
 # Pustaka pihak ketiga tanpa py.typed/stubs resmi (FASE 2-5: SQLAlchemy driver,
 # Celery worker, PDF render, S3 client) — tanpa override ini, mypy --strict
 # gagal murni karena ketiadaan stub, bukan karena bug di kode kita.
-module = ["boto3.*", "botocore.*", "celery.*", "weasyprint.*"]
+module = ["boto3.*", "botocore.*", "celery.*", "weasyprint.*", "pypdfium2.*", "pikepdf.*", "pyhanko.*", "segno.*", "PIL.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

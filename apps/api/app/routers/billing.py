@@ -5,19 +5,35 @@ import time
 import uuid
 from collections.abc import Generator
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+from redis.exceptions import RedisError
 from sqlalchemy.orm import Session
 
 from app.core.audit import get_client_ip, record_audit_log
 from app.core.dependencies import get_db, require_workspace_role
-from app.core.exceptions import ResourceNotFoundError, ValidationFailedError
+from app.core.exceptions import (
+    QuotaExhaustedError,
+    ResourceNotFoundError,
+    ValidationFailedError,
+)
 from app.core.midtrans_signature import verify_midtrans_signature
+from app.core.redis_client import get_optional_redis_client
+from app.models.enterprise_inquiry import EnterpriseInquiry
 from app.models.subscription import Subscription
 from app.models.workspace_member import WorkspaceMember
+from app.services.email_service import (
+    EmailSender,
+    get_email_sender,
+    send_enterprise_inquiry_notification,
+)
 from app.services.midtrans_adapter import MidtransAdapter, MidtransCheckoutError
 from vulnflow_contracts import (
+    EnterpriseInquiryCreateRequest,
+    EnterpriseInquiryResponse,
+    EnterpriseInquiryStatus,
     MidtransCheckoutRequest,
     MidtransCheckoutResponse,
     MidtransTransactionStatus,
@@ -27,6 +43,9 @@ from vulnflow_contracts import (
 
 router = APIRouter(prefix="/api/v1/workspaces/{workspace_id}/billing", tags=["billing"])
 webhook_router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
+public_enterprise_router = APIRouter(prefix="/api/v1/public", tags=["public"])
+
+_PUBLIC_INQUIRY_RATE_LIMIT_PER_HOUR = 5
 
 _require_manager = require_workspace_role({"MANAGER"})
 _require_any_member = require_workspace_role({"MANAGER", "PENTESTER", "VIEWER"})
@@ -65,18 +84,45 @@ def _subscription_to_status(db: Session, subscription: Subscription) -> Subscrip
         db.refresh(subscription)
         reset_date = _normalize_utc(subscription.quota_reset_date)
 
-    remaining = max(0, subscription.monthly_report_quota - subscription.reports_used_this_month)
+    is_unlimited = subscription.monthly_report_quota < 0
+    remaining = (
+        0
+        if is_unlimited
+        else max(0, subscription.monthly_report_quota - subscription.reports_used_this_month)
+    )
     return SubscriptionStatusResponse(
         workspace_id=str(subscription.workspace_id),
         tier=subscription.tier,
         status=subscription.status,
         monthly_report_quota=subscription.monthly_report_quota,
+        is_unlimited=is_unlimited,
+        custom_batch_limit=subscription.custom_batch_limit,
         reports_used_this_month=subscription.reports_used_this_month,
         remaining_reports=remaining,
         quota_reset_date=reset_date,
         payment_status=subscription.payment_status,
         payment_type=subscription.payment_type,
         midtrans_order_id=subscription.midtrans_order_id,
+    )
+
+
+def _inquiry_to_response(inquiry: EnterpriseInquiry) -> EnterpriseInquiryResponse:
+    return EnterpriseInquiryResponse(
+        id=str(inquiry.id),
+        workspace_id=str(inquiry.workspace_id) if inquiry.workspace_id else None,
+        submitted_by_user_id=(
+            str(inquiry.submitted_by_user_id) if inquiry.submitted_by_user_id else None
+        ),
+        company_name=inquiry.company_name,
+        contact_name=inquiry.contact_name,
+        contact_email=inquiry.contact_email,
+        team_size=inquiry.team_size,
+        estimated_monthly_reports=inquiry.estimated_monthly_reports,
+        requirements=inquiry.requirements,
+        status=cast(EnterpriseInquiryStatus, inquiry.status),
+        admin_notes=inquiry.admin_notes,
+        created_at=inquiry.created_at,
+        updated_at=inquiry.updated_at,
     )
 
 
@@ -197,7 +243,8 @@ def checkout(
     if subscription is None:
         raise ResourceNotFoundError("No subscription found for this workspace.")
 
-    order_id = f"ORD-{workspace_id}-{int(time.time())}"
+    # Midtrans Snap enforces a 50-char max on order_id; undashed UUID hex keeps it at 47 chars.
+    order_id = f"ORD-{workspace_id.hex}-{int(time.time())}"
     try:
         snap_token, redirect_url = adapter.create_transaction(
             order_id=order_id, gross_amount=gross_amount
@@ -348,3 +395,109 @@ def midtrans_webhook(
         return {"status": "CANCELLED"}
 
     return {"status": "OK"}
+
+
+@router.post("/enterprise-inquiry", response_model=EnterpriseInquiryResponse, status_code=201)
+def create_workspace_enterprise_inquiry(
+    workspace_id: uuid.UUID,
+    payload: EnterpriseInquiryCreateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    email_sender: EmailSender = Depends(get_email_sender),
+    current_member: WorkspaceMember = Depends(_require_manager),
+) -> EnterpriseInquiryResponse:
+    inquiry = EnterpriseInquiry(
+        workspace_id=workspace_id,
+        submitted_by_user_id=current_member.user_id,
+        company_name=payload.company_name,
+        contact_name=payload.contact_name,
+        contact_email=payload.contact_email,
+        team_size=payload.team_size,
+        estimated_monthly_reports=payload.estimated_monthly_reports,
+        requirements=payload.requirements,
+        status="NEW",
+    )
+    db.add(inquiry)
+    db.flush()
+    record_audit_log(
+        db,
+        workspace_id=workspace_id,
+        actor_user_id=current_member.user_id,
+        action="ENTERPRISE_INQUIRY_SUBMITTED",
+        target_entity=f"enterprise_inquiry:{inquiry.id}",
+        ip_address=get_client_ip(request),
+        details={
+            "company_name": payload.company_name,
+            "contact_email": payload.contact_email,
+            "team_size": payload.team_size,
+        },
+    )
+    db.commit()
+    db.refresh(inquiry)
+    send_enterprise_inquiry_notification(
+        email_sender,
+        inquiry_id=str(inquiry.id),
+        company_name=inquiry.company_name,
+        contact_name=inquiry.contact_name,
+        contact_email=inquiry.contact_email,
+        team_size=inquiry.team_size,
+        estimated_monthly_reports=inquiry.estimated_monthly_reports,
+        requirements=inquiry.requirements,
+        workspace_id=str(workspace_id),
+    )
+    return _inquiry_to_response(inquiry)
+
+
+def _enforce_public_inquiry_rate_limit(redis_client: Any | None, ip_address: str) -> None:
+    if redis_client is None:
+        return
+    key = f"ratelimit:enterprise_inquiry:{ip_address}"
+    try:
+        current = redis_client.incr(key)
+        if int(current) == 1:
+            redis_client.expire(key, 3600)
+        if int(current) > _PUBLIC_INQUIRY_RATE_LIMIT_PER_HOUR:
+            raise QuotaExhaustedError(
+                "Too many inquiries submitted from this address. Please wait before retrying."
+            )
+    except (RedisError, OSError, AttributeError):
+        return
+
+
+@public_enterprise_router.post(
+    "/enterprise-inquiries", response_model=EnterpriseInquiryResponse, status_code=201
+)
+def submit_public_enterprise_inquiry(
+    payload: EnterpriseInquiryCreateRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    email_sender: EmailSender = Depends(get_email_sender),
+    redis_client: Any | None = Depends(get_optional_redis_client),
+) -> EnterpriseInquiryResponse:
+    _enforce_public_inquiry_rate_limit(redis_client, get_client_ip(request))
+    inquiry = EnterpriseInquiry(
+        workspace_id=None,
+        submitted_by_user_id=None,
+        company_name=payload.company_name,
+        contact_name=payload.contact_name,
+        contact_email=payload.contact_email,
+        team_size=payload.team_size,
+        estimated_monthly_reports=payload.estimated_monthly_reports,
+        requirements=payload.requirements,
+        status="NEW",
+    )
+    db.add(inquiry)
+    db.commit()
+    db.refresh(inquiry)
+    send_enterprise_inquiry_notification(
+        email_sender,
+        inquiry_id=str(inquiry.id),
+        company_name=inquiry.company_name,
+        contact_name=inquiry.contact_name,
+        contact_email=inquiry.contact_email,
+        team_size=inquiry.team_size,
+        estimated_monthly_reports=inquiry.estimated_monthly_reports,
+        requirements=inquiry.requirements,
+        workspace_id=None,
+    )
+    return _inquiry_to_response(inquiry)
