@@ -22,7 +22,7 @@ from vulnflow_contracts import NarrativeContent
 
 _API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models"
 _TRANSIENT_STATUS_CODES = {429, 500, 502, 503, 504}
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
+DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 DEFAULT_GEMINI_FALLBACK_MODEL = "gemini-2.5-flash-lite"
 
 _RESPONSE_SCHEMA_INSTRUCTIONS = (
