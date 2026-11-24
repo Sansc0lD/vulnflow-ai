@@ -1,6 +1,6 @@
 [project]
 name = "vulnflow-contracts"
-version = "0.1.0"
+version = "1.0.0"
 description = "Shared Pydantic V2 data contracts for VulnFlow AI (apps/api + apps/cli) — SDD Bab 2.6.1"
 requires-python = ">=3.12"
 dependencies = [

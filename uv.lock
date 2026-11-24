@@ -3334,7 +3334,7 @@ wheels = [
 
 [[package]]
 name = "vulnflow-ai"
-version = "0.1.0"
+version = "1.0.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]
@@ -3363,7 +3363,7 @@ dev = [
 
 [[package]]
 name = "vulnflow-api"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "apps/api" }
 dependencies = [
     { name = "alembic" },
@@ -3416,7 +3416,7 @@ requires-dist = [
 
 [[package]]
 name = "vulnflow-cli"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "apps/cli" }
 dependencies = [
     { name = "defusedxml" },
@@ -3437,7 +3437,7 @@ requires-dist = [
 
 [[package]]
 name = "vulnflow-contracts"
-version = "0.1.0"
+version = "1.0.0"
 source = { editable = "packages/contracts" }
 dependencies = [
     { name = "email-validator" },
