@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 from app.core.audit import get_client_ip, record_audit_log
 from app.core.dependencies import get_db, require_workspace_role
 from app.core.exceptions import (
-    QuotaExhaustedError,
     ResourceNotFoundError,
     ValidationFailedError,
 )
@@ -24,6 +23,7 @@ from app.core.redis_client import get_optional_redis_client
 from app.models.enterprise_inquiry import EnterpriseInquiry
 from app.models.subscription import Subscription
 from app.models.workspace_member import WorkspaceMember
+from app.services.captcha_service import issue_inquiry_challenge, verify_inquiry_captcha
 from app.services.email_service import (
     EmailSender,
     get_email_sender,
@@ -31,6 +31,7 @@ from app.services.email_service import (
 )
 from app.services.midtrans_adapter import MidtransAdapter, MidtransCheckoutError
 from vulnflow_contracts import (
+    EnterpriseInquiryChallengeResponse,
     EnterpriseInquiryCreateRequest,
     EnterpriseInquiryResponse,
     EnterpriseInquiryStatus,
@@ -404,8 +405,10 @@ def create_workspace_enterprise_inquiry(
     request: Request,
     db: Session = Depends(get_db),
     email_sender: EmailSender = Depends(get_email_sender),
+    redis_client: Any | None = Depends(get_optional_redis_client),
     current_member: WorkspaceMember = Depends(_require_manager),
 ) -> EnterpriseInquiryResponse:
+    _enforce_inquiry_rate_limit(redis_client, f"workspace:{workspace_id}")
     inquiry = EnterpriseInquiry(
         workspace_id=workspace_id,
         submitted_by_user_id=current_member.user_id,
@@ -448,20 +451,32 @@ def create_workspace_enterprise_inquiry(
     return _inquiry_to_response(inquiry)
 
 
-def _enforce_public_inquiry_rate_limit(redis_client: Any | None, ip_address: str) -> None:
+def _enforce_inquiry_rate_limit(redis_client: Any | None, scope_key: str) -> None:
     if redis_client is None:
         return
-    key = f"ratelimit:enterprise_inquiry:{ip_address}"
+    key = f"ratelimit:enterprise_inquiry:{scope_key}"
     try:
         current = redis_client.incr(key)
         if int(current) == 1:
             redis_client.expire(key, 3600)
         if int(current) > _PUBLIC_INQUIRY_RATE_LIMIT_PER_HOUR:
-            raise QuotaExhaustedError(
-                "Too many inquiries submitted from this address. Please wait before retrying."
+            raise HTTPException(
+                status_code=429,
+                detail=(
+                    "Too many Enterprise inquiries submitted recently. Please wait before retrying."
+                ),
+                headers={"Retry-After": "3600"},
             )
     except (RedisError, OSError, AttributeError):
         return
+
+
+@public_enterprise_router.get(
+    "/enterprise-inquiries/challenge",
+    response_model=EnterpriseInquiryChallengeResponse,
+)
+def get_public_enterprise_inquiry_challenge() -> EnterpriseInquiryChallengeResponse:
+    return issue_inquiry_challenge()
 
 
 @public_enterprise_router.post(
@@ -474,7 +489,14 @@ def submit_public_enterprise_inquiry(
     email_sender: EmailSender = Depends(get_email_sender),
     redis_client: Any | None = Depends(get_optional_redis_client),
 ) -> EnterpriseInquiryResponse:
-    _enforce_public_inquiry_rate_limit(redis_client, get_client_ip(request))
+    client_ip = get_client_ip(request)
+    _enforce_inquiry_rate_limit(redis_client, f"ip:{client_ip}")
+    verify_inquiry_captcha(
+        captcha_token=payload.captcha_token,
+        captcha_answer=payload.captcha_answer,
+        remote_ip=client_ip,
+        redis_client=redis_client,
+    )
     inquiry = EnterpriseInquiry(
         workspace_id=None,
         submitted_by_user_id=None,

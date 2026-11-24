@@ -417,6 +417,16 @@ export interface EnterpriseInquiryCreatePayload {
   team_size: string
   estimated_monthly_reports?: number | null
   requirements: string
+  captcha_token?: string | null
+  captcha_answer?: string | null
+}
+
+export interface EnterpriseInquiryChallenge {
+  mode: 'turnstile' | 'math_hmac'
+  site_key?: string | null
+  challenge_token?: string | null
+  prompt?: string | null
+  expires_in: number
 }
 
 export interface EnterpriseInquiryResponse {
@@ -1069,6 +1079,12 @@ export const api = {
         {},
         { skipAuthRedirect: true }
       ),
+    getEnterpriseInquiryChallenge: () =>
+      request<EnterpriseInquiryChallenge>(
+        '/public/enterprise-inquiries/challenge',
+        {},
+        { skipAuthRedirect: true }
+      ),
     submitEnterpriseInquiry: (payload: EnterpriseInquiryCreatePayload) =>
       request<EnterpriseInquiryResponse>(
         '/public/enterprise-inquiries',
@@ -1120,6 +1136,10 @@ export const api = {
       request<EnterpriseInquiryResponse>(`/admin/enterprise-inquiries/${inquiryId}`, {
         method: 'PATCH',
         body: JSON.stringify(payload),
+      }),
+    deleteEnterpriseInquiry: (inquiryId: string) =>
+      request<void>(`/admin/enterprise-inquiries/${inquiryId}`, {
+        method: 'DELETE',
       }),
   },
 }

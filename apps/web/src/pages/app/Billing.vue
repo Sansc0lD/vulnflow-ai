@@ -312,7 +312,7 @@
             @click="openEnterpriseModal"
             class="btn-glass w-full py-2.5 text-xs justify-center disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {{ isManager ? 'Request Enterprise plan' : 'Only Managers can request upgrade' }}
+            {{ isManager ? 'Request Enterprise Upgrade' : 'Only Managers can request upgrade' }}
           </button>
         </div>
       </div>
@@ -415,7 +415,7 @@
     <!-- Enterprise Inquiry Modal -->
     <BaseModal
       :open="enterpriseModalOpen"
-      title="Request Enterprise Plan"
+      title="Request Enterprise Upgrade"
       subtitle="Submit your workspace capacity and deployment requirements. Our platform team will provision Enterprise limits once approved."
       max-width="md"
       @close="enterpriseModalOpen = false"

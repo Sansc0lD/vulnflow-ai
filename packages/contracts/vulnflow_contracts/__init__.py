@@ -37,6 +37,7 @@ from vulnflow_contracts.auth_schemas import (
     WorkspaceRole,
 )
 from vulnflow_contracts.billing_schemas import (
+    EnterpriseInquiryChallengeResponse,
     EnterpriseInquiryCreateRequest,
     EnterpriseInquiryResponse,
     EnterpriseInquiryStatus,
@@ -129,6 +130,7 @@ __all__ = [
     "CompilePDFAcceptedResponse",
     "CompilePDFRequest",
     "DeleteAccountRequest",
+    "EnterpriseInquiryChallengeResponse",
     "EnterpriseInquiryCreateRequest",
     "EnterpriseInquiryResponse",
     "EnterpriseInquiryStatus",

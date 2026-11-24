@@ -15,6 +15,7 @@ from app.core.totp import compute_totp
 from app.domain.fallback import get_fallback_narrative
 from app.domain.sanitizer import whitelist_tech_stack
 from app.main import app
+from app.models.audit_log import AuditLog
 from app.models.finding import Finding
 from app.models.project import Project
 from app.models.proof_of_concept import ProofOfConcept
@@ -84,6 +85,12 @@ def _register_user(client: TestClient, email: str = "ent@example.com") -> dict[s
     return resp.json()
 
 
+def _solve_math_prompt(prompt: str) -> str:
+    body = prompt.removeprefix("What is ").removesuffix("?").strip()
+    left, op, right = body.split()
+    return str(int(left) + int(right) if op == "+" else int(left) - int(right))
+
+
 def test_enterprise_inquiry_and_admin_unlimited_provisioning(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -101,32 +108,69 @@ def test_enterprise_inquiry_and_admin_unlimited_provisioning(
             ws_id = reg["workspace_id"]
             user_headers = {"Authorization": f"Bearer {reg['access_token']}"}
 
-            # Public inquiry
+            pub_payload = {
+                "company_name": "Nusantara Cyber",
+                "contact_name": "Rina",
+                "contact_email": "rina@nusantara.io",
+                "team_size": "21-50",
+                "estimated_monthly_reports": 150,
+                "requirements": "Dedicated VPC & 2000 findings CLI batch size.",
+            }
+
+            # Public inquiry requires CAPTCHA challenge
+            no_captcha = client.post("/api/v1/public/enterprise-inquiries", json=pub_payload)
+            assert no_captcha.status_code == 422
+
+            challenge = client.get("/api/v1/public/enterprise-inquiries/challenge")
+            assert challenge.status_code == 200
+            chal_data = challenge.json()
+            assert chal_data["mode"] == "math_hmac"
+            answer = _solve_math_prompt(chal_data["prompt"])
+
+            wrong_captcha = client.post(
+                "/api/v1/public/enterprise-inquiries",
+                json={
+                    **pub_payload,
+                    "captcha_token": chal_data["challenge_token"],
+                    "captcha_answer": str(int(answer) + 1),
+                },
+            )
+            assert wrong_captcha.status_code == 422
+
             pub_inq = client.post(
                 "/api/v1/public/enterprise-inquiries",
                 json={
-                    "company_name": "Nusantara Cyber",
-                    "contact_name": "Rina",
-                    "contact_email": "rina@nusantara.io",
-                    "team_size": "21-50",
-                    "estimated_monthly_reports": 150,
-                    "requirements": "Dedicated VPC & 2000 findings CLI batch size.",
+                    **pub_payload,
+                    "captcha_token": chal_data["challenge_token"],
+                    "captcha_answer": answer,
                 },
             )
             assert pub_inq.status_code == 201
             assert pub_inq.json()["status"] == "NEW"
 
+            # Replaying the same challenge token must be rejected
+            replay_captcha = client.post(
+                "/api/v1/public/enterprise-inquiries",
+                json={
+                    **pub_payload,
+                    "captcha_token": chal_data["challenge_token"],
+                    "captcha_answer": answer,
+                },
+            )
+            assert replay_captcha.status_code == 422
+
             # Workspace-linked inquiry
+            ws_inq_payload = {
+                "company_name": "Corp Sec",
+                "contact_name": "Budi",
+                "contact_email": "budi@corp.example",
+                "team_size": "50+",
+                "requirements": "Unlimited PDF exports and custom SLA.",
+            }
             ws_inq = client.post(
                 f"/api/v1/workspaces/{ws_id}/billing/enterprise-inquiry",
                 headers=user_headers,
-                json={
-                    "company_name": "Corp Sec",
-                    "contact_name": "Budi",
-                    "contact_email": "budi@corp.example",
-                    "team_size": "50+",
-                    "requirements": "Unlimited PDF exports and custom SLA.",
-                },
+                json=ws_inq_payload,
             )
             assert ws_inq.status_code == 201
             inq_id = ws_inq.json()["id"]
@@ -164,6 +208,39 @@ def test_enterprise_inquiry_and_admin_unlimited_provisioning(
             assert override.json()["is_unlimited"] is True
             assert override.json()["custom_batch_limit"] == 2500
 
+            pub_inq_id = pub_inq.json()["id"]
+            upd_pub_inq = client.patch(
+                f"/api/v1/admin/enterprise-inquiries/{pub_inq_id}",
+                headers=admin_headers,
+                json={"status": "CONTACTED", "admin_notes": "Follow-up call scheduled."},
+            )
+            assert upd_pub_inq.status_code == 200
+            assert upd_pub_inq.json()["status"] == "CONTACTED"
+
+            # Only DECLINED inquiries can be deleted
+            del_blocked = client.delete(
+                f"/api/v1/admin/enterprise-inquiries/{pub_inq_id}",
+                headers=admin_headers,
+            )
+            assert del_blocked.status_code == 422
+
+            decline_pub = client.patch(
+                f"/api/v1/admin/enterprise-inquiries/{pub_inq_id}",
+                headers=admin_headers,
+                json={"status": "DECLINED", "admin_notes": "Spam lead"},
+            )
+            assert decline_pub.status_code == 200
+
+            del_ok = client.delete(
+                f"/api/v1/admin/enterprise-inquiries/{pub_inq_id}",
+                headers=admin_headers,
+            )
+            assert del_ok.status_code == 204
+            remaining_inquiries = client.get(
+                "/api/v1/admin/enterprise-inquiries", headers=admin_headers
+            ).json()
+            assert [item["id"] for item in remaining_inquiries] == [inq_id]
+
             upd_inq = client.patch(
                 f"/api/v1/admin/enterprise-inquiries/{inq_id}",
                 headers=admin_headers,
@@ -171,6 +248,41 @@ def test_enterprise_inquiry_and_admin_unlimited_provisioning(
             )
             assert upd_inq.status_code == 200
             assert upd_inq.json()["status"] == "PROVISIONED"
+
+            # Verify authenticated workspace endpoint enforces 5/hour rate limit
+            for _ in range(4):
+                extra = client.post(
+                    f"/api/v1/workspaces/{ws_id}/billing/enterprise-inquiry",
+                    headers=user_headers,
+                    json=ws_inq_payload,
+                )
+                assert extra.status_code == 201
+            rate_limited = client.post(
+                f"/api/v1/workspaces/{ws_id}/billing/enterprise-inquiry",
+                headers=user_headers,
+                json=ws_inq_payload,
+            )
+            assert rate_limited.status_code == 429
+
+            # Verify PostgreSQL column length accommodates enterprise_inquiry:<uuid> (55 chars)
+            target_col = AuditLog.__table__.c.target_entity
+            assert getattr(target_col.type, "length", 0) >= 128
+            audit_rows = (
+                db_session.query(AuditLog)
+                .filter(
+                    AuditLog.action.in_(
+                        [
+                            "ENTERPRISE_INQUIRY_SUBMITTED",
+                            "ADMIN_ENTERPRISE_INQUIRY_UPDATED",
+                            "ADMIN_ENTERPRISE_INQUIRY_DELETED",
+                        ]
+                    )
+                )
+                .all()
+            )
+            assert len(audit_rows) == 9
+            assert all(row.target_entity.startswith("enterprise_inquiry:") for row in audit_rows)
+            assert all(len(row.target_entity) == 55 for row in audit_rows)
 
             sub_resp = client.get(
                 f"/api/v1/workspaces/{ws_id}/billing/subscription",

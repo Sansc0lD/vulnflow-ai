@@ -430,7 +430,15 @@
                   </td>
                   <td class="py-2.5 pl-3 text-right">
                     <button
-                      v-if="inq.workspace_id"
+                      v-if="inq.status === 'DECLINED'"
+                      type="button"
+                      @click="deleteInquiryTarget = inq"
+                      class="btn-glass px-2.5 py-1 text-xs border-red-400/35 text-red-300 hover:bg-red-500/20"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      v-else-if="inq.workspace_id"
                       type="button"
                       @click="quickProvisionFromInquiry(inq)"
                       class="btn-glass px-2.5 py-1 text-xs border-emerald-400/35 text-emerald-300 hover:bg-emerald-500/20"
@@ -640,6 +648,18 @@
       @cancel="activateTarget = null"
     />
 
+    <!-- Delete Declined Inquiry Confirmation -->
+    <ConfirmDialog
+      :open="Boolean(deleteInquiryTarget)"
+      title="Delete Declined Inquiry?"
+      :message="`Permanently delete declined Enterprise inquiry from '${deleteInquiryTarget?.company_name || ''}'? This action cannot be undone.`"
+      confirm-text="Delete Permanently"
+      variant="danger"
+      :loading="deletingInquiry"
+      @confirm="confirmDeleteInquiry"
+      @cancel="deleteInquiryTarget = null"
+    />
+
     <!-- Audit Detail Modal -->
     <BaseModal
       :open="Boolean(selectedAuditLog)"
@@ -820,6 +840,9 @@ const loadingWorkspaces = ref(false)
 const workspaceTierFilter = ref('')
 const inquiryStatusFilter = ref('')
 const subOverrideTarget = ref<AdminWorkspaceSubscriptionSummary | null>(null)
+const provisioningInquiryId = ref<string | null>(null)
+const deleteInquiryTarget = ref<EnterpriseInquiryResponse | null>(null)
+const deletingInquiry = ref(false)
 const savingSubOverride = ref(false)
 const subForm = ref<{
   tier: 'FREE' | 'PRO' | 'ENTERPRISE'
@@ -852,6 +875,7 @@ async function loadWorkspacesAndInquiries(): Promise<void> {
 }
 
 const openSubscriptionModal = (ws: AdminWorkspaceSubscriptionSummary) => {
+  provisioningInquiryId.value = null
   subOverrideTarget.value = ws
   subForm.value = {
     tier: (ws.tier === 'PRO' || ws.tier === 'ENTERPRISE' ? ws.tier : 'FREE') as
@@ -868,6 +892,7 @@ const openSubscriptionModal = (ws: AdminWorkspaceSubscriptionSummary) => {
 const quickProvisionFromInquiry = (inq: EnterpriseInquiryResponse) => {
   const target = workspaceSubs.value.find((w) => w.workspace_id === inq.workspace_id)
   if (!target) return
+  provisioningInquiryId.value = inq.id
   subOverrideTarget.value = target
   subForm.value = {
     tier: 'ENTERPRISE',
@@ -901,6 +926,13 @@ const confirmSubscriptionOverride = async () => {
       custom_batch_limit: subForm.value.custom_batch_limit || null,
       reason: subForm.value.reason,
     })
+    if (provisioningInquiryId.value && subForm.value.tier === 'ENTERPRISE') {
+      await api.admin.updateEnterpriseInquiry(provisioningInquiryId.value, {
+        status: 'PROVISIONED',
+        admin_notes: subForm.value.reason,
+      })
+    }
+    provisioningInquiryId.value = null
     subOverrideTarget.value = null
     await Promise.all([loadWorkspacesAndInquiries(), loadAuditLogs(auditOffset.value)])
     toast.success('Workspace plan updated.')
@@ -955,6 +987,23 @@ const confirmActivateUser = async () => {
     toast.error(err instanceof Error ? err.message : 'Unable to activate user.')
   } finally {
     activating.value = false
+  }
+}
+
+const confirmDeleteInquiry = async () => {
+  if (!deleteInquiryTarget.value) return
+  deletingInquiry.value = true
+  try {
+    const targetId = deleteInquiryTarget.value.id
+    await api.admin.deleteEnterpriseInquiry(targetId)
+    inquiries.value = inquiries.value.filter((item) => item.id !== targetId)
+    deleteInquiryTarget.value = null
+    await loadAuditLogs(auditOffset.value)
+    toast.success('Declined inquiry permanently deleted.')
+  } catch (err: unknown) {
+    toast.error(err instanceof Error ? err.message : 'Unable to delete inquiry.')
+  } finally {
+    deletingInquiry.value = false
   }
 }
 </script>
