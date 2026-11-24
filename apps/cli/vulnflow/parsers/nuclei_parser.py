@@ -92,12 +92,14 @@ def normalize_nuclei_finding(raw: dict[str, Any]) -> UnifiedVulnerabilityFinding
 
     template_id = raw.get("template-id", "unknown-template")
     raw_evidence = json.dumps(raw, ensure_ascii=False)[:_RAW_EVIDENCE_MAX_CHARS]
+    raw_cvss_vector = str(classification.get("cvss-metrics") or "").strip()
+    cvss_vector = raw_cvss_vector if raw_cvss_vector.startswith("CVSS:3.1/") else None
 
     return UnifiedVulnerabilityFinding(
         title=info.get("name") or template_id,
         severity=severity,
         cvss_score=classification.get("cvss-score"),
-        cvss_vector=classification.get("cvss-metrics"),
+        cvss_vector=cvss_vector,
         cwe_id=cwe_id,
         target_host=target_host,
         target_port=target_port,

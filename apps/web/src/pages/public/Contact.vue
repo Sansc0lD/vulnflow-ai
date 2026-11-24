@@ -505,7 +505,11 @@ const prefillFromSession = () => {
 
 onMounted(async () => {
   if (session.state.hasToken && !session.state.initialized) {
-    await session.hydrate()
+    try {
+      await session.hydrate()
+    } catch {
+      // Public inquiry flow still works for guests or expired local tokens
+    }
   }
   prefillFromSession()
   if (!captchaChallenge.value) {
@@ -531,14 +535,19 @@ const handleInquirySubmit = async () => {
     if (useWorkspaceLink && activeWsId) {
       submittedInquiry.value = await api.billing.submitEnterpriseInquiry(activeWsId, payload)
     } else {
-      if (captchaChallenge.value?.mode === 'turnstile') {
+      if (!captchaChallenge.value) {
+        toast.warning('Verification challenge unavailable. Refreshing challenge now.')
+        await loadCaptchaChallenge()
+        return
+      }
+      if (captchaChallenge.value.mode === 'turnstile') {
         if (!turnstileToken.value) {
           toast.error('Please complete the human verification challenge.')
           return
         }
         payload.captcha_token = turnstileToken.value
       } else {
-        payload.captcha_token = captchaChallenge.value?.challenge_token ?? null
+        payload.captcha_token = captchaChallenge.value.challenge_token ?? null
         payload.captcha_answer = captchaAnswer.value
       }
       submittedInquiry.value = await api.public.submitEnterpriseInquiry(payload)

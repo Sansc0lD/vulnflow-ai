@@ -4,28 +4,28 @@ import { session } from '@/stores/session'
 import { toast } from '@/stores/toast'
 
 // Public Pages
-import Home from '@/pages/public/Home.vue'
-import About from '@/pages/public/About.vue'
-import Solutions from '@/pages/public/Solutions.vue'
-import SolutionDetail from '@/pages/public/SolutionDetail.vue'
-import Contact from '@/pages/public/Contact.vue'
-import VerifyReport from '@/pages/public/VerifyReport.vue'
+const Home = () => import('@/pages/public/Home.vue')
+const About = () => import('@/pages/public/About.vue')
+const Solutions = () => import('@/pages/public/Solutions.vue')
+const SolutionDetail = () => import('@/pages/public/SolutionDetail.vue')
+const Contact = () => import('@/pages/public/Contact.vue')
+const VerifyReport = () => import('@/pages/public/VerifyReport.vue')
 
 // Auth Pages
-import Login from '@/pages/app/Login.vue'
-import Register from '@/pages/app/Register.vue'
-import ForgotPassword from '@/pages/app/ForgotPassword.vue'
-import ResetPassword from '@/pages/app/ResetPassword.vue'
+const Login = () => import('@/pages/app/Login.vue')
+const Register = () => import('@/pages/app/Register.vue')
+const ForgotPassword = () => import('@/pages/app/ForgotPassword.vue')
+const ResetPassword = () => import('@/pages/app/ResetPassword.vue')
 
 // Authenticated SaaS App Pages
-import Dashboard from '@/pages/app/Dashboard.vue'
-import Projects from '@/pages/app/Projects.vue'
-import Triage from '@/pages/app/Triage.vue'
-import AINarrative from '@/pages/app/AINarrative.vue'
-import ThemeStudio from '@/pages/app/ThemeStudio.vue'
-import Billing from '@/pages/app/Billing.vue'
-import Settings from '@/pages/app/Settings.vue'
-import AdminConsole from '@/pages/app/AdminConsole.vue'
+const Dashboard = () => import('@/pages/app/Dashboard.vue')
+const Projects = () => import('@/pages/app/Projects.vue')
+const Triage = () => import('@/pages/app/Triage.vue')
+const AINarrative = () => import('@/pages/app/AINarrative.vue')
+const ThemeStudio = () => import('@/pages/app/ThemeStudio.vue')
+const Billing = () => import('@/pages/app/Billing.vue')
+const Settings = () => import('@/pages/app/Settings.vue')
+const AdminConsole = () => import('@/pages/app/AdminConsole.vue')
 
 const routes: RouteRecordRaw[] = [
   // Public Routes
@@ -191,6 +191,15 @@ router.beforeEach(async (to, _from, next) => {
   }
 
   if (to.meta.guestOnly && token) {
+    if (
+      to.name === 'register' &&
+      !session.state.user?.is_superadmin &&
+      typeof to.query.invite === 'string' &&
+      to.query.invite.trim()
+    ) {
+      next({ path: '/app/settings', query: { invite: to.query.invite.trim() } })
+      return
+    }
     next(session.state.user?.is_superadmin ? '/app/admin' : '/app/dashboard')
     return
   }

@@ -750,7 +750,15 @@ const applyColorPreset = (p: string, s: string) => {
 }
 
 let pollTimer: number | undefined
+let themeUnmounted = false
+let reportLoadSeq = 0
+let reportPollSeq = 0
+const MAX_REPORT_POLL_ATTEMPTS = 80
+
 onUnmounted(() => {
+  themeUnmounted = true
+  reportLoadSeq += 1
+  reportPollSeq += 1
   window.clearInterval(pollTimer)
 })
 
@@ -815,6 +823,7 @@ watch(
 )
 
 async function loadProjectReportingData(): Promise<void> {
+  const seq = ++reportLoadSeq
   const wId = session.state.activeWorkspaceId
   const pId = session.state.activeProjectId
   if (!wId || !pId) {
@@ -832,6 +841,14 @@ async function loadProjectReportingData(): Promise<void> {
       api.reports.list(wId, pId),
       api.ai.listNarratives(wId, pId),
     ])
+    if (
+      themeUnmounted ||
+      seq !== reportLoadSeq ||
+      session.state.activeWorkspaceId !== wId ||
+      session.state.activeProjectId !== pId
+    ) {
+      return
+    }
     const eligible = findingsRes.items.filter(
       (f) => !f.is_quarantined && f.status !== 'FALSE_POSITIVE'
     )
@@ -842,15 +859,20 @@ async function loadProjectReportingData(): Promise<void> {
     reports.value = reportList
     narratives.value = narrativeList
   } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'Unable to load project reporting data.')
+    if (!themeUnmounted && seq === reportLoadSeq) {
+      toast.error(err instanceof Error ? err.message : 'Unable to load project reporting data.')
+    }
   } finally {
-    loadingData.value = false
+    if (!themeUnmounted && seq === reportLoadSeq) {
+      loadingData.value = false
+    }
   }
 }
 
 watch(
   [() => session.state.activeWorkspaceId, () => session.state.activeProjectId],
   () => {
+    reportPollSeq += 1
     window.clearInterval(pollTimer)
     activeJob.value = null
     isCompiling.value = false
@@ -913,6 +935,12 @@ const compilePDF = async () => {
   const wId = session.state.activeWorkspaceId
   const pId = session.state.activeProjectId
   if (!wId || !pId) return
+  const pollSeq = ++reportPollSeq
+  const isStale = () =>
+    themeUnmounted ||
+    pollSeq !== reportPollSeq ||
+    session.state.activeWorkspaceId !== wId ||
+    session.state.activeProjectId !== pId
 
   isCompiling.value = true
   window.clearInterval(pollTimer)
@@ -933,6 +961,7 @@ const compilePDF = async () => {
         confidentiality_notice: confidentialityText.value,
       },
     })
+    if (isStale()) return
     activeJob.value = {
       job_id: accepted.job_id,
       status: accepted.status,
@@ -940,9 +969,25 @@ const compilePDF = async () => {
     }
     toast.info('PDF export started...')
 
+    let pollCount = 0
     pollTimer = window.setInterval(async () => {
+      if (isStale()) {
+        window.clearInterval(pollTimer)
+        return
+      }
+      pollCount += 1
+      if (pollCount > MAX_REPORT_POLL_ATTEMPTS) {
+        window.clearInterval(pollTimer)
+        isCompiling.value = false
+        toast.error('PDF compilation timed out. Please refresh and try again.')
+        return
+      }
       try {
         const jobStatus = await api.reports.getJobStatus(wId, accepted.job_id)
+        if (isStale()) {
+          window.clearInterval(pollTimer)
+          return
+        }
         activeJob.value = jobStatus
         if (jobStatus.status === 'COMPLETED') {
           window.clearInterval(pollTimer)
@@ -952,7 +997,9 @@ const compilePDF = async () => {
             session.refreshSubscription(),
             session.refreshProjectProgress(),
           ])
-          toast.success('PDF report is ready to download.')
+          if (!isStale()) {
+            toast.success('PDF report is ready to download.')
+          }
         } else if (jobStatus.status === 'FAILED') {
           window.clearInterval(pollTimer)
           isCompiling.value = false
@@ -960,18 +1007,22 @@ const compilePDF = async () => {
         }
       } catch (pollErr: unknown) {
         window.clearInterval(pollTimer)
-        isCompiling.value = false
-        toast.error(pollErr instanceof Error ? pollErr.message : 'Unable to check PDF export progress.')
+        if (!isStale()) {
+          isCompiling.value = false
+          toast.error(pollErr instanceof Error ? pollErr.message : 'Unable to check PDF export progress.')
+        }
       }
     }, 1500)
   } catch (err: unknown) {
-    isCompiling.value = false
-    if (err instanceof ApiError && err.status === 402) {
-      quotaHitApi.value = true
-      toast.warning('Monthly PDF quota reached. Upgrade your plan in Billing.')
-      return
+    if (!isStale()) {
+      isCompiling.value = false
+      if (err instanceof ApiError && err.status === 402) {
+        quotaHitApi.value = true
+        toast.warning('Monthly PDF quota reached. Upgrade your plan in Billing.')
+        return
+      }
+      toast.error(err instanceof Error ? err.message : 'Unable to start PDF export.')
     }
-    toast.error(err instanceof Error ? err.message : 'Unable to start PDF export.')
   }
 }
 

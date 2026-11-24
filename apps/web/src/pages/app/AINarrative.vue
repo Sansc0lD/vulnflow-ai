@@ -501,7 +501,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import {
   AlertCircle,
@@ -638,7 +638,18 @@ const removeRemediationItem = (index: number) => {
   editor.value.remediations.splice(index, 1)
 }
 
+let aiComponentUnmounted = false
+let aiLoadSeq = 0
+let aiGenSeq = 0
+
+onUnmounted(() => {
+  aiComponentUnmounted = true
+  aiLoadSeq += 1
+  aiGenSeq += 1
+})
+
 async function loadData(): Promise<void> {
+  const seq = ++aiLoadSeq
   const wId = session.state.activeWorkspaceId
   const pId = session.state.activeProjectId
   if (!wId || !pId) {
@@ -655,6 +666,14 @@ async function loadData(): Promise<void> {
       api.findings.list(wId, pId, { is_quarantined: false, limit: 200 }),
       api.ai.listNarratives(wId, pId),
     ])
+    if (
+      aiComponentUnmounted ||
+      seq !== aiLoadSeq ||
+      session.state.activeWorkspaceId !== wId ||
+      session.state.activeProjectId !== pId
+    ) {
+      return
+    }
     const eligible = findingsRes.items.filter(
       (f) => !f.is_quarantined && f.status !== 'FALSE_POSITIVE'
     )
@@ -670,15 +689,23 @@ async function loadData(): Promise<void> {
     selectedNarrativeId.value = narrativeList[0]?.id || (narrativeList[0] ? '0' : '')
     syncEditorFromNarrative(currentNarrative.value)
   } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'Unable to load report draft data.')
+    if (!aiComponentUnmounted && seq === aiLoadSeq) {
+      toast.error(err instanceof Error ? err.message : 'Unable to load report draft data.')
+    }
   } finally {
-    loading.value = false
+    if (!aiComponentUnmounted && seq === aiLoadSeq) {
+      loading.value = false
+    }
   }
 }
 
 watch(
   [() => session.state.activeWorkspaceId, () => session.state.activeProjectId],
   () => {
+    aiGenSeq += 1
+    generating.value = false
+    generationStage.value = ''
+    generationProgress.value = 0
     void loadData()
   },
   { immediate: true }
@@ -713,6 +740,13 @@ const executeGenerate = async () => {
   const wId = session.state.activeWorkspaceId
   const pId = session.state.activeProjectId
   if (!wId || !pId) return
+  const genSeq = ++aiGenSeq
+
+  const isStale = () =>
+    aiComponentUnmounted ||
+    genSeq !== aiGenSeq ||
+    session.state.activeWorkspaceId !== wId ||
+    session.state.activeProjectId !== pId
 
   generating.value = true
   generationStage.value = 'Queueing AI draft job...'
@@ -724,10 +758,13 @@ const executeGenerate = async () => {
       sections_requested: ['executive_summary', 'business_impact', 'remediations'],
       finding_ids: selectedFindingIds.value,
     })
+    if (isStale()) return
 
     let generated: AINarrativeResponse | null = null
     for (let attempt = 0; attempt < 90; attempt++) {
+      if (isStale()) return
       const job = await api.ai.getJobStatus(wId, pId, accepted.job_id)
+      if (isStale()) return
       generationStage.value = job.stage || 'Generating draft...'
       generationProgress.value = job.progress_percentage ?? 50
       if (job.status === 'COMPLETED' && job.narrative) {
@@ -736,6 +773,7 @@ const executeGenerate = async () => {
       }
       if (job.status === 'COMPLETED') {
         const latest = await api.ai.listNarratives(wId, pId)
+        if (isStale()) return
         generated = latest[0] ?? null
         break
       }
@@ -745,6 +783,7 @@ const executeGenerate = async () => {
       await new Promise((resolve) => window.setTimeout(resolve, 1200))
     }
 
+    if (isStale()) return
     if (!generated) {
       throw new Error('AI draft generation is still running. Refresh in a moment to view it.')
     }
@@ -760,11 +799,15 @@ const executeGenerate = async () => {
       toast.success(`Report draft generated (${generated.tokens_consumed} tokens).`)
     }
   } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'Unable to generate report draft.')
+    if (!isStale()) {
+      toast.error(err instanceof Error ? err.message : 'Unable to generate report draft.')
+    }
   } finally {
-    generating.value = false
-    generationStage.value = ''
-    generationProgress.value = 0
+    if (!aiComponentUnmounted && genSeq === aiGenSeq) {
+      generating.value = false
+      generationStage.value = ''
+      generationProgress.value = 0
+    }
   }
 }
 

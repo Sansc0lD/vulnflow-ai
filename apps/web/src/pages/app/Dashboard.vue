@@ -353,7 +353,10 @@ const statusCards = computed(() =>
   }))
 )
 
+let dashboardLoadSeq = 0
+
 async function loadDashboard(): Promise<void> {
+  const seq = ++dashboardLoadSeq
   const wId = session.state.activeWorkspaceId
   const pId = session.state.activeProjectId
   if (!wId || !pId) {
@@ -372,15 +375,25 @@ async function loadDashboard(): Promise<void> {
       api.ai.listNarratives(wId, pId),
       api.reports.list(wId, pId),
     ])
+    if (
+      seq !== dashboardLoadSeq ||
+      session.state.activeWorkspaceId !== wId ||
+      session.state.activeProjectId !== pId
+    ) {
+      return
+    }
     recentFindings.value = findingsRes.items
     summary.value = findingsRes.summary
     narratives.value = narrativeList
     recentReports.value = reportList
   } catch (err: unknown) {
+    if (seq !== dashboardLoadSeq) return
     toast.error(err instanceof Error ? err.message : 'Unable to load project metrics.')
   } finally {
-    hasLoadedOnce.value = true
-    loading.value = false
+    if (seq === dashboardLoadSeq) {
+      hasLoadedOnce.value = true
+      loading.value = false
+    }
   }
 }
 

@@ -4,10 +4,18 @@ from pathlib import Path
 
 import httpx
 import typer
+from defusedxml import DefusedXmlException
+from defusedxml import ElementTree as DefusedET
 from pydantic import ValidationError
 
 from vulnflow import __version__
-from vulnflow.config import CLIConfig, ConfigNotFoundError, load_config, save_config
+from vulnflow.config import (
+    CLIConfig,
+    ConfigNotFoundError,
+    load_config,
+    normalize_api_url,
+    save_config,
+)
 from vulnflow.environment import resolve_target_environment
 from vulnflow.ingest_client import (
     FreeTierBatchLimitError,
@@ -75,7 +83,11 @@ def configure(
         typer.echo("[-] --workspace must not be empty.", err=True)
         raise typer.Exit(code=1)
 
-    config = CLIConfig(api_url=api_url.rstrip("/"), api_key=token, active_workspace_id=workspace)
+    config = CLIConfig(
+        api_url=normalize_api_url(api_url),
+        api_key=token,
+        active_workspace_id=workspace,
+    )
     path = save_config(config)
     typer.echo(f"[+] Configuration saved to {path}")
 
@@ -136,11 +148,15 @@ def _normalize_findings(
             except ValidationError:
                 skipped += 1
     elif scan_type == "nmap":
-        for nmap_raw in parse_nmap_hosts(file):
-            try:
-                findings.append(normalize_nmap_finding(dict(nmap_raw)))
-            except ValidationError:
-                skipped += 1
+        try:
+            for nmap_raw in parse_nmap_hosts(file):
+                try:
+                    findings.append(normalize_nmap_finding(dict(nmap_raw)))
+                except ValidationError:
+                    skipped += 1
+        except (DefusedET.ParseError, DefusedXmlException, ValueError) as exc:
+            typer.echo(f"[-] Failed to parse Nmap XML '{file}': {exc}", err=True)
+            raise typer.Exit(code=1) from exc
     else:
         raise typer.BadParameter(f"Unsupported --type '{scan_type}'. Use 'nuclei' or 'nmap'.")
 
@@ -203,16 +219,20 @@ def push(
                 top_n = sorted(findings, key=lambda f: _SEVERITY_RANK.get(f.severity.value, 99))[
                     :FREE_TIER_TOP_N
                 ]
-                result = push_batch(
-                    client,
-                    api_url=config.api_url,
-                    workspace_id=config.active_workspace_id,
-                    project_id=project,
-                    api_key=config.api_key,
-                    findings=top_n,
-                    scan_metadata=scan_metadata,
-                    idempotency_key=f"{file_hash}:global-top{FREE_TIER_TOP_N}",
-                )
+                try:
+                    result = push_batch(
+                        client,
+                        api_url=config.api_url,
+                        workspace_id=config.active_workspace_id,
+                        project_id=project,
+                        api_key=config.api_key,
+                        findings=top_n,
+                        scan_metadata=scan_metadata,
+                        idempotency_key=f"{file_hash}:global-top{FREE_TIER_TOP_N}",
+                    )
+                except (IngestTransientError, IngestClientError) as retry_exc:
+                    typer.echo(f"[-] Upload failed: {retry_exc}", err=True)
+                    raise typer.Exit(code=1) from retry_exc
                 new_total += result.new_findings_count
                 duplicate_total += result.duplicate_findings_count
                 quarantined_total += result.quarantined_count
@@ -252,7 +272,7 @@ def status() -> None:
 
     try:
         with httpx.Client(timeout=5.0) as client:
-            resp = client.get(f"{config.api_url.rstrip('/')}/health")
+            resp = client.get(f"{normalize_api_url(config.api_url)}/health")
         if resp.status_code == 200:
             typer.echo("API Health:   OK (200)")
         else:

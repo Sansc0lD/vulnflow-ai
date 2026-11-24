@@ -220,7 +220,11 @@ const handleRegister = async () => {
       invitation_token: hasInvite.value ? invitationToken.value : undefined,
     })
     await session.applyRegister(res)
-    toast.success('Account and workspace created successfully.')
+    toast.success(
+      hasInvite.value
+        ? 'Account created and workspace joined successfully.'
+        : 'Account and workspace created successfully.'
+    )
     await router.push('/app/dashboard')
   } catch (err: unknown) {
     if (err instanceof ApiError && err.details.length > 0) {

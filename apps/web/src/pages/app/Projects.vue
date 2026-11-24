@@ -557,6 +557,7 @@ const formatTechStackTags = (stack?: ProjectTechStack | null): string[] => {
 watch(
   () => session.state.activeWorkspaceId,
   async (wId) => {
+    recentlyCreatedProject.value = null
     if (!wId) {
       members.value = []
       return

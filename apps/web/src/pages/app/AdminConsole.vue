@@ -889,9 +889,36 @@ const openSubscriptionModal = (ws: AdminWorkspaceSubscriptionSummary) => {
   }
 }
 
-const quickProvisionFromInquiry = (inq: EnterpriseInquiryResponse) => {
-  const target = workspaceSubs.value.find((w) => w.workspace_id === inq.workspace_id)
-  if (!target) return
+const quickProvisionFromInquiry = async (inq: EnterpriseInquiryResponse) => {
+  if (!inq.workspace_id) {
+    toast.info('This public inquiry has no linked workspace ID yet. Ask the visitor to register a workspace first.')
+    return
+  }
+  let target = workspaceSubs.value.find((w) => w.workspace_id === inq.workspace_id)
+  if (!target) {
+    try {
+      const unrestricted = await api.admin.listWorkspaces({})
+      target = unrestricted.find((w) => w.workspace_id === inq.workspace_id)
+    } catch {
+      target = undefined
+    }
+  }
+  if (!target) {
+    target = {
+      workspace_id: inq.workspace_id,
+      workspace_name: inq.company_name,
+      tier: 'FREE',
+      status: 'ACTIVE',
+      monthly_report_quota: 3,
+      is_unlimited: false,
+      reports_used_this_month: 0,
+      custom_batch_limit: null,
+      quota_reset_date: new Date().toISOString(),
+      payment_status: 'NONE',
+      manager_emails: [inq.contact_email],
+      created_at: inq.created_at,
+    }
+  }
   provisioningInquiryId.value = inq.id
   subOverrideTarget.value = target
   subForm.value = {

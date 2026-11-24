@@ -96,7 +96,8 @@ services:
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
-      - ./apps:/app/apps
+      - ./apps/api:/app/apps/api
+      - ./apps/cli:/app/apps/cli
       - ./packages:/app/packages
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -133,7 +134,8 @@ services:
       - SMTP_ENABLED=${SMTP_ENABLED:-true}
       - APP_BASE_URL=${APP_BASE_URL:-http://localhost:5173}
     volumes:
-      - ./apps:/app/apps
+      - ./apps/api:/app/apps/api
+      - ./apps/cli:/app/apps/cli
       - ./packages:/app/packages
     depends_on:
       postgres:
