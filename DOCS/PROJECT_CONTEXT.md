@@ -1,6 +1,6 @@
 # VulnFlow AI — Full Project Context
 
-> Snapshot date: 2026-11-23 (`v1.0.0-beta` — Pending Final User Validation). FASE 0–7 complete, live E2E + production Nginx overlay + GitHub Actions CI verified; final manual validation and GitHub push remain with the project owner.
+> Snapshot date: 2026-11-24 (`v1.0.0` Release Candidate on `release/v1.0.0` — Locally Verified, Pending GitHub Actions CI & Final `main`/Tag Release). FASE 0–7 complete, live E2E + PostgreSQL 16 + Linux Docker PDF + production Nginx overlay verified; branch `release/v1.0.0` awaits GitHub Actions CI confirmation before final owner merge to `main` and `v1.0.0` tag.
 > This is a derived summary for onboarding/orientation. On any conflict, the authoritative sources are `SRS.md`, `SDD.md`, `EDGE_CASES_AND_RESILIENCE.md`, and `PLAN.md` in this same directory — re-check them, as this file can go stale.
 
 ## 1. Product Purpose & Key Constraints
@@ -166,19 +166,23 @@ This audit doc is a **point-in-time artifact** explaining *why* contracts look t
      - **Live Browser Walkthrough**: Executed full Playwright walkthrough across public showcase routes, authenticated workspace routes, and Superadmin `/app/admin` on `http://localhost:5173` with `0` console errors, `0` uncaught page errors, `0` unexpected `>= 500` responses, and `HTTP 200` MinIO image loads.
 15. **Beta Release Candidate Hardening (`2026-11-23`, `v1.0.0-beta`)**:
    - Added Enterprise inquiry workflow (`enterprise_inquiries`, Admin `Workspaces & Plans` tab), private VPC `OllamaLLMAdapter`, async `ai_worker.py` + Redis prompt cache, project `tech_stack` context, and Free-tier PDF rasterization/QR protection (`pdf_protector.py` + public `/verify/:code?`) via migrations `a1b2c3d4e501` → `b2c3d4e5f602`.
-   - Verified `uv run python scripts/check_quality.py --final` **5/5 PASS** (`Coverage: 85.9%`, `pip-audit` `0` CVEs across pinned `brotli>=1.2.1`, `dnspython>=2.9.2`, `opentelemetry-api>=1.45.2`), `11/11` `test_postgres_semantics.py` passing against PostgreSQL 16, `486 passed` default pytest suite (`12` Windows host skips), Linux Docker `pdf_protector` + WeasyPrint verification (`VF-QT9Q-MP6M-XDJL`), `vue-tsc` + `vite build`, Nginx + Gunicorn production overlay (`docker-compose.prod.yml` at `:8080`), and `.github/workflows/ci.yml`.
-   - Status remains **`v1.0.0-beta`** locally on `main` (clean seeded DB reset) pending final manual validation and `git push` by the project owner.
+16. **Release Candidate `v1.0.0` Alignment & Smoke Verification (`2026-11-24`, branch `release/v1.0.0`)**:
+   - Widened `audit_logs.target_entity` (`VARCHAR(50)` → `VARCHAR(128)`) via migration `c3d4e5f6a703` and added Cloudflare Turnstile / signed single-use Math-HMAC CAPTCHA (`captcha_service.py`) to public Enterprise inquiries.
+   - Aligned `DEFAULT_GEMINI_MODEL` in `gemini_adapter.py` to `gemini-3-flash-preview` (matching `.env.example`), bumped all monorepo packages and `FastAPI(..., version=__version__)` to `1.0.0`, added MIT `LICENSE` and `CHANGELOG.md`, and enabled `.github/workflows/ci.yml` on `release/**`.
+   - Verified `uv run python scripts/check_quality.py --final` **5/5 PASS** (`Coverage: 85.5%`, `0` CVEs, `81` mypy strict files, `165` Ruff formatted files), `486 passed` default pytest (`12` Windows host skips) + `49/49` resilience tests, `11/11` `test_postgres_semantics.py` on live PostgreSQL 16 (`c3d4e5f6a703`), Linux Docker WeasyPrint + `protect_report_pdf` smoke check (`3,447` → `61,542` bytes rasterized PDF), `vue-tsc` + `vite build` (`511.33 kB` JS / `143.95 kB` gzip) + `pnpm audit --prod` (`0` CVEs), and `docker-compose.prod.yml` Nginx + Gunicorn 5/5 endpoint smoke checks (`openapi.json` `1.0.0`).
+   - Pending remote GitHub Actions CI confirmation on `release/v1.0.0` before final merge to `main` and annotated tag `v1.0.0`.
 
 ## Key File Paths
 
 - `DOCS/SRS.md`, `DOCS/SDD.md`, `DOCS/EDGE_CASES_AND_RESILIENCE.md`, `DOCS/PLAN.md`, `DOCS/AUDIT_FINDINGS.md`, `DOCS/PROJECT_CONTEXT.md`, `DOCS/BROWSER_TESTING_GUIDE.md`, `DOCS/QA_SIGN_OFF.md`, `DOCS/BETA_RELEASE_PLAN.md`
+- `LICENSE`, `CHANGELOG.md`
 - `packages/contracts/vulnflow_contracts/{admin_schemas,ai_schemas,auth_schemas,billing_schemas,error_envelope,finding_schemas,report_schemas,workspace_schemas}.py`
 - `tests/contracts/test_schemas.py`
 - `apps/api/app/core/{audit,crypto,database,dependencies,exceptions,midtrans_signature,migration_filters,redis_client,security,seeder,totp}.py`, `apps/api/app/main.py`
 - `apps/api/app/models/{base,user,workspace,workspace_member,subscription,api_key,project,finding,proof_of_concept,ai_narrative,report,enterprise_inquiry,audit_log}.py`
-- `apps/api/migrations/` (Alembic head `b2c3d4e5f602` — `env.py` wired to `app.models.Base.metadata` + `DATABASE_URL`)
+- `apps/api/migrations/` (Alembic head `c3d4e5f6a703` — `env.py` wired to `app.models.Base.metadata` + `DATABASE_URL`)
 - `apps/api/app/domain/{deduplication,cvss,scope,sanitizer,fallback,ai_ghostwriter,telemetry}.py`
-- `apps/api/app/services/{safe_fetcher,gemini_adapter,ollama_adapter,s3_storage,report_renderer,pdf_protector,midtrans_adapter,email_service,image_validator}.py`
+- `apps/api/app/services/{safe_fetcher,gemini_adapter,ollama_adapter,s3_storage,report_renderer,pdf_protector,midtrans_adapter,email_service,image_validator,captcha_service}.py`
 - `apps/api/app/routers/{admin,ai,auth,billing,ingest,projects,reports,triage,workspaces}.py`
 - `apps/api/app/workers/{celery_app,ai_worker,report_worker}.py`
 - `apps/api/app/templates/` (Jinja2 HTML/CSS report templates)

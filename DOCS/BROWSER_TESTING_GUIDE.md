@@ -119,7 +119,7 @@ Uji 5 halaman publik Desain Web sebelum login:
      - **<= 10 Assets** (mis. `5 Assets`) → pastikan paket menampilkan **Free** (`Rp 0 / month`, `3 PDF exports/month`).
      - **11–50 Assets** → **Pro** (`Rp 750.000 / month`, `30 PDF exports/month`).
      - **> 50 Assets** → **Enterprise**.
-   - Isi form **Enterprise inquiry** (`Full name`, `Company or team`, `Work email`, `Team size`, `Volume, private LLM / on-premise & target notes`, centang persetujuan **NDA**) lalu klik **`Submit Enterprise inquiry`**.
+   - Isi form **Enterprise inquiry** (`Full name`, `Company or team`, `Work email`, `Team size`, `Volume, private LLM / on-premise & target notes`, selesaikan verifikasi anti-bot CAPTCHA — tantangan aritmetika Math-HMAC bawaan atau widget Cloudflare Turnstile jika `TURNSTILE_SITE_KEY` & `TURNSTILE_SECRET_KEY` diisi — dan centang persetujuan **NDA**) lalu klik **`Submit Enterprise inquiry`**.
    - Pastikan konfirmasi inquiry muncul dan cek **Mailpit (`http://localhost:8025`)** bahwa email notifikasi lead Enterprise terkirim ke `sales@vulnflow.local` (dan entri tersimpan di database untuk ditinjau Superadmin di Skenario 6).
 6. **Public Report Provenance Verification — `http://localhost:5173/verify`**
    - Masukkan kode acak (mis. `VF-0000-0000-0000`) lalu klik **`Verify ID`** → pastikan status menampilkan **`NOT FOUND`**.

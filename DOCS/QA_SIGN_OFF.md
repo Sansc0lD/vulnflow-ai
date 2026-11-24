@@ -10,14 +10,14 @@
 - [Rencana Finalisasi Beta (BETA_RELEASE_PLAN.md)](BETA_RELEASE_PLAN.md)
 
 **Mata Kuliah:** Implementasi Perancangan Perangkat Lunak (IPPL) & Desain Web  
-**Tanggal Verifikasi:** 23 November 2026  
-**Status Saat Ini:** **TERVERIFIKASI TAHAP BETA (`v1.0.0-beta` — Pending Final User Validation)**
+**Tanggal Verifikasi:** 24 November 2026  
+**Status Saat Ini:** **TERVERIFIKASI LOKAL (`v1.0.0` Release Candidate di `release/v1.0.0` — Menunggu Konfirmasi CI GitHub Actions & Tag Final)**
 
 ---
 
 ## 1. Rangkuman Eksekutif Kualitas Perangkat Lunak
 
-Platform **VulnFlow AI (`v1.0.0-beta`)** telah melalui proses verifikasi dan validasi menyeluruh pada seluruh tingkatan arsitektur piramida pengujian (*Testing Pyramid*), termasuk uji stack live dan container production overlay. Seluruh modul dibangun mengikuti metodologi **Spec-Driven Development (SDD)** dan **Test-Driven Development (TDD)** dengan penegakan mutu berjenjang (*Quality Gates*):
+Platform **VulnFlow AI (`v1.0.0` Release Candidate)** telah melalui proses verifikasi dan validasi menyeluruh pada seluruh tingkatan arsitektur piramida pengujian (*Testing Pyramid*), termasuk uji PostgreSQL 16 nyata (`c3d4e5f6a703`), container Linux WeasyPrint + PDF protection, dan container production overlay Nginx + Gunicorn (`openapi.json` versi `1.0.0`). Seluruh modul dibangun mengikuti metodologi **Spec-Driven Development (SDD)** dan **Test-Driven Development (TDD)** dengan penegakan mutu berjenjang (*Quality Gates*):
 
 ```
                             PIRAMIDA HASIL JAMINAN MUTU KODE
@@ -26,16 +26,16 @@ Platform **VulnFlow AI (`v1.0.0-beta`)** telah melalui proses verifikasi dan val
                               │ Resilience Suite │  (49 test cases PASS)
                               ├──────────────────┤
                               │ Integrasi API,   │  486 Automated Tests + 11 Live PG16
-                              │ CLI & Backend    │  Branch Coverage 85.9% (>= 85%)
+                              │ CLI & Backend    │  Branch Coverage 85.5% (>= 85%)
                               ├──────────────────┤
                               │ Static Security  │  Bandit (0 High/Med) &
                               │ Scan (SAST)      │  pip-audit (0 Known CVEs)
                               ├──────────────────┤
-                              │ Strict Typecheck │  Mypy --strict (82 files, 0 errors)
+                              │ Strict Typecheck │  Mypy --strict (81 files, 0 errors)
                               │ (Backend & Web)  │  vue-tsc (0 errors)
                               ├──────────────────┤
-                              │ Lint & Format    │  Ruff (164 files formatted, 0 errors)
-                              │ Otomatis         │  Vite Build (504.79 kB / 142.02 kB gz)
+                              │ Lint & Format    │  Ruff (165 files formatted, 0 errors)
+                              │ Otomatis         │  Vite Build (511.33 kB / 143.95 kB gz)
                               └──────────────────┘
 ```
 
@@ -73,15 +73,15 @@ Seluruh 18 skenario kegagalan ekstrem dan kasus batas ketahanan sistem yang dima
 | Lapisan / Paket | Direktori Pengujian | Status Verifikasi | Catatan Cakupan & Hasil |
 |---|---|:---:|---|
 | **Pydantic Contracts** | `tests/contracts/` | **PASS** | Skema shared contracts V2 (`extra="forbid"`) & negative validation |
-| **Database, Models & Semantics** | `tests/models/` | **PASS** | SQLAlchemy ORM + **11/11** `test_postgres_semantics.py` terhadap PostgreSQL 16 (head `b2c3d4e5f602`) |
+| **Database, Models & Semantics** | `tests/models/` | **PASS** | SQLAlchemy ORM + **11/11** `test_postgres_semantics.py` terhadap PostgreSQL 16 (head `c3d4e5f6a703`) |
 | **Domain & Security Engines** | `tests/domain/` | **PASS** | Deduplication, CVSS, ScopeEnforcer, Sanitizer, DeterministicFallback, Telemetry |
 | **Core Utilities & Auth** | `tests/core/` | **PASS** | Crypto AES-256-GCM, JWT, TOTP MFA, Midtrans signature |
-| **Service Adapters** | `tests/services/` | **PASS** | SafeFetcher anti-SSRF, S3/MinIO, Gemini/Ollama, Mailpit email, WeasyPrint + `pdf_protector` (diuji di container Linux) |
+| **Service Adapters** | `tests/services/` | **PASS** | SafeFetcher anti-SSRF, S3/MinIO, Gemini/Ollama, Mailpit email, WeasyPrint + `pdf_protector` (diuji di container Linux), `captcha_service` |
 | **FastAPI REST Routers & Workers** | `tests/api/` | **PASS** | Multi-tenant RBAC, Admin Console, AI/PDF Celery workers, Midtrans checkout & webhook |
 | **Cross-Platform CLI Agent** | `tests/cli/` | **PASS** | `configure`, `setup-tools`, `scan`, chunked `push` idempoten |
 | **18 Edge Cases Resilience** | `tests/test_resilience/` | **PASS** | **49 tests** (18/18 file EC-01..EC-18) lulus 100% |
-| **Frontend Web SPA (`apps/web`)** | `apps/web/` | **PASS** | `vue-tsc` (0 error), Vite bundle `504.79 kB` (`142.02 kB` gzipped), Nginx prod overlay |
-| **TOTAL KESELURUHAN (`check_quality.py --final`)** | `tests/` + `apps/web/` | **5/5 PASS** | **486 passed** (unit/integrasi) + **11 passed** (live PG16) · **Branch Coverage: `85.9%` (>= `85%`)** |
+| **Frontend Web SPA (`apps/web`)** | `apps/web/` | **PASS** | `vue-tsc` (0 error), Vite bundle `511.33 kB` (`143.95 kB` gzipped), `pnpm audit --prod` (`0` CVEs), Nginx prod overlay |
+| **TOTAL KESELURUHAN (`check_quality.py --final`)** | `tests/` + `apps/web/` | **5/5 PASS** | **486 passed** (unit/integrasi) + **11 passed** (live PG16) · **Branch Coverage: `85.5%` (>= `85%`)** |
 
 ---
 
@@ -94,22 +94,22 @@ Seluruh 18 skenario kegagalan ekstrem dan kasus batas ketahanan sistem yang dima
    * Skor: **0 Known CVEs**.
    * Seluruh dependensi pihak ketiga di `pyproject.toml` dan `uv.lock` (termasuk `brotli>=1.2.1`, `dnspython>=2.9.2`, `opentelemetry-api>=1.45.2`) diverifikasi bebas dari advisori kerentanan publik.
 3. **Strict Static Type Checking (Mypy & vue-tsc):**
-   * Backend & CLI: `mypy --strict` menghasilkan **0 error** pada **82 berkas sumber Python**.
+   * Backend & CLI: `mypy --strict` menghasilkan **0 error** pada **81 berkas sumber Python**.
    * Frontend Web: `vue-tsc --noEmit` menghasilkan **0 type error** pada seluruh komponen dan halaman Vue 3.
 4. **Performa & Ukuran Bundle:**
-   * Build produksi frontend (`vite build`) menghasilkan bundle JS sebesar `504.79 kB` (`142.02 kB` gzipped) dalam ~10.9 detik.
+   * Build produksi frontend (`vite build`) menghasilkan bundle JS sebesar `511.33 kB` (`143.95 kB` gzipped) dan CSS `45.93 kB` (`8.60 kB` gzipped) dalam `5.64` detik, dengan `pnpm audit --prod` **0 kerentanan**.
 
 ---
 
-## 5. Lembar Pengesahan Status Beta (*Pre-Release Validation Gate*)
+## 5. Lembar Pengesahan Status Release Candidate (*Pre-Release Validation Gate*)
 
-Dengan ini dinyatakan bahwa kandidat rilis **`VulnFlow AI v1.0.0-beta`** telah lolos seluruh gerbang mutu otomatis (5/5 `check_quality.py --final`), uji PostgreSQL 16 nyata (`11/11`), uji proteksi PDF di container Linux, serta *smoke test* stack produksi Nginx Overlay. Penetapan status final **`v1.0.0` GA** menunggu pengecekan dan persetujuan manual dari pemilik proyek.
+Dengan ini dinyatakan bahwa kandidat rilis **`VulnFlow AI v1.0.0` (branch `release/v1.0.0`)** telah lolos seluruh gerbang mutu otomatis (5/5 `check_quality.py --final`), uji PostgreSQL 16 nyata (`11/11` di Alembic head `c3d4e5f6a703`), uji proteksi PDF di container Linux (`3,447` → `61,542` byte rasterized), serta *smoke test* stack produksi Nginx Overlay (`health`, `/`, `/verify/INVALID`, `/api/v1/public/enterprise-inquiries/challenge`, `/openapi.json` versi `1.0.0`). Penetapan rilis final **`v1.0.0` GA** pada `main` menunggu konfirmasi hijau GitHub Actions CI dan persetujuan akhir pemilik proyek.
 
 | Peran Tim / Tanggung Jawab | Pelaksana | Status Verifikasi | Tanggal |
 |---|---|:---:|---|
-| **Automated Quality Gates (Ruff/Mypy/Bandit/Pytest/Audit)** | `scripts/check_quality.py --final` | `[BETA VERIFIED — 5/5 PASS]` | 23 November 2026 |
-| **Database & Live Infra Verification (PG16/WeasyPrint/Nginx)** | Tim Implementasi & QA | `[BETA VERIFIED — PASS]` | 23 November 2026 |
-| **Final Product Sign-Off & GitHub Release (`v1.0.0`)** | Pemilik Proyek | `[PENDING USER VALIDATION]` | — |
+| **Automated Quality Gates (Ruff/Mypy/Bandit/Pytest/Audit)** | `scripts/check_quality.py --final` | `[RC VERIFIED — 5/5 PASS]` | 24 November 2026 |
+| **Database & Live Infra Verification (PG16/WeasyPrint/Nginx)** | Tim Implementasi & QA | `[RC VERIFIED — PASS]` | 24 November 2026 |
+| **GitHub Actions CI (`release/v1.0.0`) & Final `v1.0.0` Tag** | Pemilik Proyek | `[PENDING CI & FINAL SIGN-OFF]` | — |
 
 ---
-*Dokumen ini merupakan snapshot verifikasi kandidat rilis **`v1.0.0-beta`** sebelum validasi akhir dan push GitHub oleh pemilik proyek.*
+*Dokumen ini merupakan snapshot verifikasi kandidat rilis **`v1.0.0` Release Candidate** pada branch `release/v1.0.0` sebelum merge ke `main` dan pembuatan tag `v1.0.0` oleh pemilik proyek.*

@@ -17,8 +17,8 @@ Spesifikasi mengikat ada di [`DOCS/`](DOCS/), **bukan** di README ini:
 | [`AUDIT_FINDINGS.md`](DOCS/AUDIT_FINDINGS.md)                       | Catatan audit teknis & riwayat perbaikan lintas fase                       |
 | [`PROJECT_CONTEXT.md`](DOCS/PROJECT_CONTEXT.md)                     | Ringkasan konteks arsitektur, progres fase, dan verifikasi live terbaru    |
 | [`BROWSER_TESTING_GUIDE.md`](DOCS/BROWSER_TESTING_GUIDE.md)         | Panduan pengujian manual end-to-end semua role di browser                  |
-| [`QA_SIGN_OFF.md`](DOCS/QA_SIGN_OFF.md)                             | Snapshot verifikasi mutu (status `v1.0.0-beta`, pending final user check)  |
-| [`BETA_RELEASE_PLAN.md`](DOCS/BETA_RELEASE_PLAN.md)                 | Rencana finalisasi & checklist validasi pemilik proyek (`v1.0.0-beta`)     |
+| [`QA_SIGN_OFF.md`](DOCS/QA_SIGN_OFF.md)                             | Snapshot verifikasi mutu (status `v1.0.0` Release Candidate)              |
+| [`BETA_RELEASE_PLAN.md`](DOCS/BETA_RELEASE_PLAN.md)                 | Arsip rencana finalisasi beta & checklist validasi pemilik proyek          |
 
 README ini hanya memandu *cara menjalankan* proyek — untuk *keputusan desain/kebutuhan*, selalu rujuk dokumen di atas.
 
@@ -56,6 +56,8 @@ vulnflow-ai/
 ├─ docker-compose.yml      # 6 container dev stack: postgres, redis, minio, mailpit, api, worker
 ├─ docker-compose.prod.yml # Overlay production/demo: tambah Nginx `web` (:8080) & Gunicorn `api`
 ├─ .env.example            # Salin ke .env, isi kredensial sendiri
+├─ CHANGELOG.md            # Catatan rilis VulnFlow AI v1.0.0
+├─ LICENSE                 # Lisensi MIT
 └─ pyproject.toml          # uv workspace root + konfigurasi ruff/mypy/pytest/bandit
 ```
 
@@ -124,17 +126,17 @@ uv run python scripts/check_quality.py
 
 ## Status Proyek
 
-Lihat tracker lengkap di [`PLAN.md`](DOCS/PLAN.md), konteks arsitektur di [`PROJECT_CONTEXT.md`](DOCS/PROJECT_CONTEXT.md), serta panduan QA manual di [`BROWSER_TESTING_GUIDE.md`](DOCS/BROWSER_TESTING_GUIDE.md). Ringkasan saat ini (**Target: `v1.0.0-beta` — Pending Final User Validation**):
+Lihat tracker lengkap di [`PLAN.md`](DOCS/PLAN.md), konteks arsitektur di [`PROJECT_CONTEXT.md`](DOCS/PROJECT_CONTEXT.md), serta panduan QA manual di [`BROWSER_TESTING_GUIDE.md`](DOCS/BROWSER_TESTING_GUIDE.md). Ringkasan saat ini (**Status: `v1.0.0` Release Candidate (`release/v1.0.0`) — Menunggu Konfirmasi CI GitHub Actions & Tag Final**):
 
 - [x] Dokumentasi (`SRS.md`, `SDD.md`, `EDGE_CASES_AND_RESILIENCE.md`, `PLAN.md`) — selesai
 - [x] **FASE 0** — Monorepo scaffolding, `docker-compose`, linter/type-checker, `check_quality.py`, CI pipeline — selesai & terverifikasi
 - [x] **FASE 1** — Pydantic V2 Shared Contracts — selesai (`admin_schemas`, `auth_schemas`, `ai_schemas`, `billing_schemas`, `error_envelope`, `finding_schemas`, `report_schemas`, `workspace_schemas`)
-- [x] **FASE 2** — Database Layer (The Lean 11 Tables + `enterprise_inquiries`, Alembic head `b2c3d4e5f602`) — selesai; migrasi & seeder terverifikasi terhadap PostgreSQL 16 nyata (`test_postgres_semantics.py`)
+- [x] **FASE 2** — Database Layer (The Lean 11 Tables + `enterprise_inquiries`, Alembic head `c3d4e5f6a703`) — selesai; migrasi & seeder terverifikasi terhadap PostgreSQL 16 nyata (`test_postgres_semantics.py`)
 - [x] **FASE 3** — Domain Core & Security Engines — selesai (`DeduplicationService`, `CVSSCalculator`, `ScopeEnforcer`, `PromptSanitizationService`, `DeterministicFallbackEngine`, `SafeURLFetcher`)
-- [x] **FASE 4** — FastAPI Routers & Celery Workers (`ai_worker`, `report_worker`, `pdf_protector`, `ollama_adapter`) — selesai & hardened
+- [x] **FASE 4** — FastAPI Routers & Celery Workers (`ai_worker`, `report_worker`, `pdf_protector`, `ollama_adapter`, `captcha_service`) — selesai & hardened
 - [x] **FASE 5** — CLI Agent (`configure`, `setup-tools`, `scan`, `push` dengan `Idempotency-Key` & chunked retry) — selesai
 - [x] **FASE 6** — Vue 3 + TypeScript Web SPA (`/`..`/contact`, `/verify/:code?`, `/app/*` workspace, dan `/app/admin` console terisolasi) — selesai
-- [x] **FASE 7** — Resilience Test Suite (EC-01..EC-18), 5/5 `--final` Quality Gate (`85.9%` coverage, `0` CVE), Full-Stack Live E2E & Production Nginx Overlay (`v1.0.0-beta` siap untuk validasi akhir pemilik proyek)
+- [x] **FASE 7** — Resilience Test Suite (EC-01..EC-18), 5/5 `--final` Quality Gate (`85.5%` coverage, `0` CVE), Full-Stack Live E2E & Production Nginx Overlay (`v1.0.0` RC terverifikasi lokal, [`CHANGELOG.md`](CHANGELOG.md) & [`LICENSE`](LICENSE) tersedia)
 
 ## Lintas Mata Kuliah: Desain Web
 
