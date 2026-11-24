@@ -1,6 +1,7 @@
 """AI token telemetry & spend ceiling calculations — FR-ADM-001 / UC-17."""
 
 import os
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func
@@ -63,6 +64,9 @@ def estimate_cost_idr(cost_usd: float) -> int:
 
 
 def compute_ai_telemetry(db: Session, *, spend_ceiling_usd: float) -> AITelemetryResponse:
+    now = datetime.now(UTC)
+    month_start = datetime(now.year, now.month, 1, tzinfo=UTC)
+
     rows = (
         db.query(
             Workspace.id,
@@ -74,6 +78,7 @@ def compute_ai_telemetry(db: Session, *, spend_ceiling_usd: float) -> AITelemetr
         )
         .join(Project, Project.workspace_id == Workspace.id)
         .join(AINarrative, AINarrative.project_id == Project.id)
+        .filter(AINarrative.generated_at >= month_start)
         .group_by(Workspace.id, Workspace.name)
         .all()
     )
@@ -82,7 +87,7 @@ def compute_ai_telemetry(db: Session, *, spend_ceiling_usd: float) -> AITelemetr
         db.query(Workspace.id, func.count(AINarrative.id))
         .join(Project, Project.workspace_id == Workspace.id)
         .join(AINarrative, AINarrative.project_id == Project.id)
-        .filter(AINarrative.is_fallback.is_(True))
+        .filter(AINarrative.generated_at >= month_start, AINarrative.is_fallback.is_(True))
         .group_by(Workspace.id)
         .all()
     )

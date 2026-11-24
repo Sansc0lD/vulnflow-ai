@@ -324,8 +324,12 @@ def override_workspace_subscription(
     subscription.monthly_report_quota = payload.monthly_report_quota
     subscription.custom_batch_limit = payload.custom_batch_limit
     subscription.status = "ACTIVE"
+    subscription.midtrans_order_id = None
+    subscription.snap_token = None
     if payload.tier in {"PRO", "ENTERPRISE"}:
         subscription.payment_status = "SETTLEMENT"
+    elif subscription.payment_status in {"PENDING", "EXPIRE", "CANCEL", "DENY"}:
+        subscription.payment_status = "NONE"
 
     record_audit_log(
         db,

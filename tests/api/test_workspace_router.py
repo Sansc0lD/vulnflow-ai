@@ -396,6 +396,9 @@ def test_workspace_crud_members_invitations_pentester_keys_logo_and_audit(
             )
             assert logo_ok.status_code == 200
             assert "logo.png" in logo_ok.json()["storage_path"]
+            ws_refreshed = client.get(f"/api/v1/workspaces/{ws_id}", headers=mgr_headers)
+            assert ws_refreshed.status_code == 200
+            assert "https://minio.local/" in (ws_refreshed.json()["custom_logo_url"] or "")
 
             # Delete workspace blocked when active project exists, succeeds once archived
             proj = client.post(

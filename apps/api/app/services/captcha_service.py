@@ -28,6 +28,8 @@ _CHALLENGE_TTL_SECONDS = 600
 _CHALLENGE_PURPOSE = "enterprise_inquiry_captcha"
 _MAX_CHALLENGE_ATTEMPTS = 3
 _TURNSTILE_VERIFY_URL = "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+_MAX_LOCAL_GUARD_ENTRIES = 2048
+_local_guard_store: dict[str, tuple[int, float]] = {}
 
 
 def get_turnstile_site_key() -> str:
@@ -115,15 +117,43 @@ def _verify_turnstile_token(captcha_token: str | None, remote_ip: str) -> None:
         raise ValidationFailedError("CAPTCHA verification failed. Please retry.")
 
 
+def _prune_local_guard(now: float) -> None:
+    expired = [k for k, (_count, exp) in _local_guard_store.items() if exp <= now]
+    for k in expired:
+        _local_guard_store.pop(k, None)
+    if len(_local_guard_store) > _MAX_LOCAL_GUARD_ENTRIES:
+        excess = len(_local_guard_store) - _MAX_LOCAL_GUARD_ENTRIES
+        for k in list(_local_guard_store)[:excess]:
+            _local_guard_store.pop(k, None)
+
+
+def _local_incr(key: str) -> int:
+    now = time.monotonic()
+    _prune_local_guard(now)
+    existing = _local_guard_store.get(key)
+    count = (existing[0] + 1) if existing and existing[1] > now else 1
+    _local_guard_store[key] = (count, now + _CHALLENGE_TTL_SECONDS)
+    return count
+
+
+def _local_get(key: str) -> int | None:
+    now = time.monotonic()
+    existing = _local_guard_store.get(key)
+    if existing is None or existing[1] <= now:
+        _local_guard_store.pop(key, None)
+        return None
+    return existing[0]
+
+
 def _consume_redis_guard(redis_client: Any | None, key: str) -> int:
     if redis_client is None:
-        return 1
+        return _local_incr(key)
     try:
         count = int(redis_client.incr(key))
         if count == 1:
             redis_client.expire(key, _CHALLENGE_TTL_SECONDS)
     except (RedisError, OSError, AttributeError, ValueError):
-        return 1
+        return _local_incr(key)
     return count
 
 
@@ -153,14 +183,18 @@ def _verify_math_hmac_challenge(
     if not nonce:
         raise ValidationFailedError("Verification challenge is malformed.")
 
+    used_key = f"captcha:used:{nonce}"
+    used_already = False
     if redis_client is not None:
         try:
-            if redis_client.get(f"captcha:used:{nonce}") is not None:
-                raise ValidationFailedError(
-                    "Verification challenge was already used. Please refresh."
-                )
+            used_already = redis_client.get(used_key) is not None
         except (RedisError, OSError, AttributeError):
-            pass
+            used_already = _local_get(used_key) is not None
+    else:
+        used_already = _local_get(used_key) is not None
+
+    if used_already:
+        raise ValidationFailedError("Verification challenge was already used. Please refresh.")
 
     attempts = _consume_redis_guard(redis_client, f"captcha:attempts:{nonce}")
     if attempts > _MAX_CHALLENGE_ATTEMPTS:
@@ -183,11 +217,15 @@ def _verify_math_hmac_challenge(
         raise ValidationFailedError("Incorrect verification answer. Please try again.")
 
     if redis_client is not None:
-        used_count = _consume_redis_guard(redis_client, f"captcha:used:{nonce}")
+        used_count = _consume_redis_guard(redis_client, used_key)
         if used_count > 1:
             raise ValidationFailedError("Verification challenge was already used. Please refresh.")
         with contextlib.suppress(RedisError, OSError, AttributeError):
-            redis_client.set(f"captcha:used:{nonce}", "1", ex=_CHALLENGE_TTL_SECONDS)
+            redis_client.set(used_key, "1", ex=_CHALLENGE_TTL_SECONDS)
+    else:
+        used_count = _local_incr(used_key)
+        if used_count > 1:
+            raise ValidationFailedError("Verification challenge was already used. Please refresh.")
 
 
 def verify_inquiry_captcha(

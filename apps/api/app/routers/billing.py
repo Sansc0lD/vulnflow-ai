@@ -1,6 +1,7 @@
 """BillingRouter — PLAN.md FASE 4.8 (SDD §2.6.3, UC-16; EC-18 webhook idempotency)."""
 
 import os
+import secrets
 import time
 import uuid
 from collections.abc import Generator
@@ -15,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import get_client_ip, record_audit_log
 from app.core.dependencies import get_db, require_workspace_role
 from app.core.exceptions import (
+    ConflictError,
     ResourceNotFoundError,
     ValidationFailedError,
 )
@@ -186,6 +188,8 @@ def sync_subscription_status(
                 },
             )
             db.commit()
+    elif subscription.tier == "ENTERPRISE":
+        return _subscription_to_status(db, subscription)
     elif tx_status in {"cancel", "deny"} or (tx_status == "capture" and fraud_status == "deny"):
         subscription.tier = "FREE"
         subscription.monthly_report_quota = FREE_TIER_MONTHLY_REPORT_QUOTA
@@ -243,9 +247,13 @@ def checkout(
     subscription = db.query(Subscription).filter_by(workspace_id=workspace_id).one_or_none()
     if subscription is None:
         raise ResourceNotFoundError("No subscription found for this workspace.")
+    if subscription.tier == "ENTERPRISE" or (
+        subscription.tier == "PRO" and subscription.payment_status == "SETTLEMENT"
+    ):
+        raise ConflictError("Workspace already has an active paid subscription.")
 
-    # Midtrans Snap enforces a 50-char max on order_id; undashed UUID hex keeps it at 47 chars.
-    order_id = f"ORD-{workspace_id.hex}-{int(time.time())}"
+    # Midtrans Snap enforces a 50-char max on order_id; prefix + timestamp + entropy is 45 chars.
+    order_id = f"ORD-{workspace_id.hex[:24]}-{int(time.time())}-{secrets.token_hex(3)}"
     try:
         snap_token, redirect_url = adapter.create_transaction(
             order_id=order_id, gross_amount=gross_amount
@@ -366,6 +374,9 @@ def midtrans_webhook(
         and subscription.payment_status == "SETTLEMENT"
     ):
         return {"status": "IGNORED_ALREADY_SETTLED"}
+
+    if subscription.tier == "ENTERPRISE":
+        return {"status": "IGNORED_ENTERPRISE_PLAN"}
 
     # F4-MED-14: Downgrade tier to FREE on EXPIRE, CANCEL, DENY (or capture fraud_status=deny)
     if is_fraud_deny or payload.transaction_status in {

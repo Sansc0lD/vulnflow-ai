@@ -1,12 +1,17 @@
 """WorkspaceRouter — PLAN.md FASE 4.3 (SDD UC-03/UC-04/UC-05)."""
 
+import contextlib
+import os
+import re
 import time
+import urllib.parse
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 import jwt as pyjwt
 from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import get_client_ip, record_audit_log
@@ -84,11 +89,43 @@ def get_upload_storage() -> S3StorageClient:
     )
 
 
-def _to_response(workspace: Workspace) -> WorkspaceResponse:
+def _resolve_optional_storage(request: Request | None) -> S3StorageClient | None:
+    if request is not None:
+        override = request.app.dependency_overrides.get(get_upload_storage)
+        if override is not None:
+            return override()  # type: ignore[no-any-return]
+    if not os.environ.get("S3_BUCKET_NAME"):
+        return None
+    try:
+        return get_upload_storage()
+    except Exception:
+        return None
+
+
+def _resolve_logo_display_url(
+    workspace: Workspace, *, storage: S3StorageClient | None
+) -> str | None:
+    raw = workspace.custom_logo_url
+    if not raw or raw.startswith("data:") or storage is None:
+        return raw
+    parsed_path = urllib.parse.urlsplit(raw).path
+    match = re.search(
+        rf"(workspaces/{re.escape(str(workspace.id))}/logo\.(?:png|jpg|jpeg|svg))$",
+        parsed_path,
+    )
+    if match:
+        with contextlib.suppress(Exception):
+            return storage.generate_presigned_url(match.group(1), expires_in_seconds=900)
+    return raw
+
+
+def _to_response(
+    workspace: Workspace, *, storage: S3StorageClient | None = None
+) -> WorkspaceResponse:
     return WorkspaceResponse(
         id=str(workspace.id),
         name=workspace.name,
-        custom_logo_url=workspace.custom_logo_url,
+        custom_logo_url=_resolve_logo_display_url(workspace, storage=storage),
         brand_primary_color=workspace.brand_primary_color,
         brand_secondary_color=workspace.brand_secondary_color,
         confidentiality_text=workspace.confidentiality_text,
@@ -98,6 +135,7 @@ def _to_response(workspace: Workspace) -> WorkspaceResponse:
 
 @router.get("", response_model=list[WorkspaceResponse])
 def list_workspaces(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[WorkspaceResponse]:
@@ -108,7 +146,8 @@ def list_workspaces(
         .order_by(Workspace.created_at.desc())
         .all()
     )
-    return [_to_response(ws) for ws in workspaces]
+    storage = _resolve_optional_storage(request)
+    return [_to_response(ws, storage=storage) for ws in workspaces]
 
 
 @router.post("/invitations/accept", response_model=WorkspaceMembership)
@@ -159,7 +198,11 @@ def accept_invitation(
         ip_address=get_client_ip(request),
         details={"role": role},
     )
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise ConflictError("You are already a member of this workspace.") from exc
 
     jti = invite.get("jti")
     if jti:
@@ -239,19 +282,20 @@ def create_workspace(
         details={"name": workspace.name},
     )
     db.commit()
-    return _to_response(workspace)
+    return _to_response(workspace, storage=_resolve_optional_storage(request))
 
 
 @router.get("/{workspace_id}", response_model=WorkspaceResponse)
 def get_workspace(
     workspace_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db),
     _member: WorkspaceMember = Depends(_require_any_member),
 ) -> WorkspaceResponse:
     workspace = db.get(Workspace, workspace_id)
     if workspace is None or workspace.is_deleted:
         raise ResourceNotFoundError("Workspace not found.")
-    return _to_response(workspace)
+    return _to_response(workspace, storage=_resolve_optional_storage(request))
 
 
 @router.patch("/{workspace_id}", response_model=WorkspaceResponse)
@@ -289,7 +333,7 @@ def update_workspace(
         details={"updated_fields": updated_fields},
     )
     db.commit()
-    return _to_response(workspace)
+    return _to_response(workspace, storage=_resolve_optional_storage(request))
 
 
 @router.delete("/{workspace_id}")
@@ -434,6 +478,12 @@ def update_member_role(
 
     old_role = target_member.role
     target_member.role = payload.role.value
+    if payload.role == WorkspaceRole.VIEWER:
+        db.query(APIKey).filter(
+            APIKey.workspace_id == workspace_id,
+            APIKey.created_by_user_id == target_user_id,
+            APIKey.is_active.is_(True),
+        ).update({"is_active": False}, synchronize_session=False)
     record_audit_log(
         db,
         workspace_id=workspace_id,
@@ -482,6 +532,11 @@ def remove_workspace_member(
             raise ConflictError("Cannot remove the sole MANAGER from the workspace.")
 
     removed_role = target_member.role
+    db.query(APIKey).filter(
+        APIKey.workspace_id == workspace_id,
+        APIKey.created_by_user_id == target_user_id,
+        APIKey.is_active.is_(True),
+    ).update({"is_active": False}, synchronize_session=False)
     db.delete(target_member)
     record_audit_log(
         db,
@@ -618,7 +673,8 @@ def upload_workspace_logo(
     storage.upload_bytes(storage_path, image_bytes, content_type=resolved_ct)
     logo_url = storage.generate_presigned_url(storage_path, expires_in_seconds=604800)
 
-    workspace.custom_logo_url = logo_url[:500]
+    # Store durable object key rather than a truncated/expiring presigned URL.
+    workspace.custom_logo_url = storage_path
     record_audit_log(
         db,
         workspace_id=workspace_id,

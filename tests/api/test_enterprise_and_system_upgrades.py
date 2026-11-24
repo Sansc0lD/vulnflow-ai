@@ -15,6 +15,7 @@ from app.core.totp import compute_totp
 from app.domain.fallback import get_fallback_narrative
 from app.domain.sanitizer import whitelist_tech_stack
 from app.main import app
+from app.models.ai_narrative import AINarrative
 from app.models.audit_log import AuditLog
 from app.models.finding import Finding
 from app.models.project import Project
@@ -536,3 +537,268 @@ def test_stack_aware_remediation_whitelist_and_ollama_adapter() -> None:
     assert adapter.last_usage["candidates_tokens"] == 60
     assert "secret.internal" not in captured["body"]
     assert "framework=fastapi" in captured["body"]
+
+
+def test_enterprise_batch_contract_allows_over_500_findings() -> None:
+    from vulnflow_contracts import BatchIngestRequest
+
+    item = {
+        "title": "Exposed Header",
+        "severity": "INFO",
+        "cvss_version": "3.1",
+        "cvss_score": 0.0,
+        "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N",
+        "cwe_id": "CWE-200",
+        "target_host": "app.example.com",
+        "source_tool": "nuclei",
+        "proof_of_concept": {"raw_evidence": "ok"},
+    }
+    req = BatchIngestRequest(
+        scan_metadata={
+            "scanner_name": "nuclei",
+            "scanner_version": "v3.2.0",
+            "scan_duration_seconds": 1.0,
+        },
+        findings=[{**item, "endpoint_path": f"/p/{i}"} for i in range(600)],
+    )
+    assert len(req.findings) == 600
+
+
+def test_captcha_local_fallback_blocks_replay_without_redis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from app.core.exceptions import ValidationFailedError
+    from app.services.captcha_service import (
+        _local_guard_store,
+        issue_inquiry_challenge,
+        verify_inquiry_captcha,
+    )
+
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-captcha-jwt-secret-key-2026")
+    monkeypatch.delenv("TURNSTILE_SITE_KEY", raising=False)
+    monkeypatch.delenv("TURNSTILE_SECRET_KEY", raising=False)
+    _local_guard_store.clear()
+
+    chal = issue_inquiry_challenge()
+    assert chal.mode == "math_hmac" and chal.challenge_token and chal.prompt
+    ans = _solve_math_prompt(chal.prompt)
+
+    verify_inquiry_captcha(
+        captcha_token=chal.challenge_token,
+        captcha_answer=ans,
+        remote_ip="203.0.113.5",
+        redis_client=None,
+    )
+    with pytest.raises(ValidationFailedError):
+        verify_inquiry_captcha(
+            captcha_token=chal.challenge_token,
+            captcha_answer=ans,
+            remote_ip="203.0.113.5",
+            redis_client=None,
+        )
+
+    # Lockout after 3 incorrect attempts without Redis
+    chal2 = issue_inquiry_challenge()
+    assert chal2.challenge_token and chal2.prompt
+    wrong_ans = str(int(_solve_math_prompt(chal2.prompt)) + 99)
+    for _ in range(4):
+        with pytest.raises(ValidationFailedError):
+            verify_inquiry_captcha(
+                captcha_token=chal2.challenge_token,
+                captcha_answer=wrong_ans,
+                remote_ip="203.0.113.5",
+                redis_client=None,
+            )
+
+    # Turnstile mode success & failure branches
+    monkeypatch.setenv("TURNSTILE_SITE_KEY", "ts-site-key")
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "ts-secret-key")
+    ts_chal = issue_inquiry_challenge()
+    assert ts_chal.mode == "turnstile"
+    assert ts_chal.site_key == "ts-site-key"
+
+    monkeypatch.setattr(
+        "app.services.captcha_service.httpx.post",
+        lambda *args, **kwargs: SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"success": True},
+        ),
+    )
+    verify_inquiry_captcha(
+        captcha_token="turnstile-tok",
+        captcha_answer=None,
+        remote_ip="203.0.113.5",
+        redis_client=None,
+    )
+
+    monkeypatch.setattr(
+        "app.services.captcha_service.httpx.post",
+        lambda *args, **kwargs: SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"success": False},
+        ),
+    )
+    with pytest.raises(ValidationFailedError):
+        verify_inquiry_captcha(
+            captcha_token="bad-tok",
+            captcha_answer=None,
+            remote_ip="203.0.113.5",
+            redis_client=None,
+        )
+
+
+def test_get_client_ip_ignores_untrusted_proxy_headers() -> None:
+    from types import SimpleNamespace
+
+    from app.core.audit import get_client_ip
+
+    untrusted = SimpleNamespace(
+        client=SimpleNamespace(host="198.51.100.42"),
+        headers={"x-forwarded-for": "1.2.3.4"},
+    )
+    assert get_client_ip(untrusted) == "198.51.100.42"  # type: ignore[arg-type]
+
+    trusted = SimpleNamespace(
+        client=SimpleNamespace(host="127.0.0.1"),
+        headers={"x-forwarded-for": "203.0.113.9, 10.0.0.1"},
+    )
+    assert get_client_ip(trusted) == "203.0.113.9"  # type: ignore[arg-type]
+
+    real_ip_proxy = SimpleNamespace(
+        client=SimpleNamespace(host="10.0.0.5"),
+        headers={"x-real-ip": "198.51.100.99"},
+    )
+    assert get_client_ip(real_ip_proxy) == "198.51.100.99"  # type: ignore[arg-type]
+
+
+def test_telemetry_excludes_prior_month_spend(db_session: Session) -> None:
+    from app.domain.telemetry import compute_ai_telemetry
+
+    ws = Workspace(name="Old Month WS")
+    db_session.add(ws)
+    db_session.flush()
+    proj = Project(
+        workspace_id=ws.id,
+        name="Proj",
+        client_name="Client",
+        target_scope="example.com",
+        roe_start_date=datetime.now(UTC) - timedelta(days=2),
+        roe_end_date=datetime.now(UTC) + timedelta(days=5),
+    )
+    db_session.add(proj)
+    db_session.flush()
+    now = datetime.now(UTC)
+    prior_month = datetime(now.year, now.month, 1, tzinfo=UTC) - timedelta(days=1)
+    db_session.add(
+        AINarrative(
+            project_id=proj.id,
+            executive_summary="Old",
+            business_impact="Old",
+            remediation_priorities=[],
+            tokens_consumed=50_000_000,
+            prompt_tokens=25_000_000,
+            candidates_tokens=25_000_000,
+            generated_at=prior_month,
+        )
+    )
+    db_session.commit()
+
+    telemetry = compute_ai_telemetry(db_session, spend_ceiling_usd=5.0)
+    assert telemetry.total_tokens == 0
+    assert telemetry.circuit_breaker_active is False
+
+
+def test_enterprise_subscription_immune_to_stale_checkout_and_admin_clears_order(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hashlib
+
+    from app.routers.billing import get_midtrans_adapter
+
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", "test-server-key")
+    monkeypatch.setenv("SEED_ADMIN_PASSWORD", "Test-Seed-Admin-2026!")
+
+    class _FakeMidtrans:
+        def create_transaction(self, *, order_id: str, gross_amount: int) -> tuple[str, str]:
+            return "snap-tok", "https://snap.local/pay"
+
+    app.dependency_overrides[get_midtrans_adapter] = lambda: _FakeMidtrans()
+    try:
+        with TestClient(app) as client:
+            reg = client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": "ent-guard@example.com",
+                    "password": "Str0ng!Passw0rd",
+                    "full_name": "Ent Guard",
+                    "workspace_name": "Ent Guard WS",
+                },
+            ).json()
+            ws_id = reg["workspace_id"]
+            headers = {"Authorization": f"Bearer {reg['access_token']}"}
+            checkout = client.post(
+                f"/api/v1/workspaces/{ws_id}/billing/checkout",
+                json={"tier": "PRO"},
+                headers=headers,
+            ).json()
+            stale_order_id = checkout["order_id"]
+
+            seed_defaults(db_session)
+            admin_login = client.post(
+                "/api/v1/auth/login",
+                json={
+                    "email": "admin@vulnflow.local",
+                    "password": get_seed_admin_password(),
+                    "totp_code": compute_totp(get_seed_admin_totp_secret()),
+                },
+            ).json()
+            admin_headers = {"Authorization": f"Bearer {admin_login['access_token']}"}
+
+            ov = client.patch(
+                f"/api/v1/admin/workspaces/{ws_id}/subscription",
+                headers=admin_headers,
+                json={
+                    "tier": "ENTERPRISE",
+                    "monthly_report_quota": -1,
+                    "custom_batch_limit": 3000,
+                    "reason": "Direct Enterprise contract",
+                },
+            )
+            assert ov.status_code == 200
+
+            sig = hashlib.sha512(
+                f"{stale_order_id}200750000.00test-server-key".encode()
+            ).hexdigest()
+            stale_cancel = client.post(
+                "/api/v1/billing/webhook/midtrans",
+                json={
+                    "order_id": stale_order_id,
+                    "status_code": "200",
+                    "gross_amount": "750000.00",
+                    "signature_key": sig,
+                    "transaction_status": "cancel",
+                    "payment_type": "qris",
+                    "transaction_time": "2026-11-24 10:00:00",
+                },
+            )
+            assert stale_cancel.status_code == 200
+
+            # Self-service checkout must also be blocked on ENTERPRISE
+            blocked = client.post(
+                f"/api/v1/workspaces/{ws_id}/billing/checkout",
+                json={"tier": "PRO"},
+                headers=headers,
+            )
+            assert blocked.status_code == 409
+
+            sub = (
+                db_session.query(Subscription)
+                .filter_by(workspace_id=__import__("uuid").UUID(ws_id))
+                .one()
+            )
+            assert sub.tier == "ENTERPRISE"
+            assert sub.midtrans_order_id is None
+    finally:
+        app.dependency_overrides.pop(get_midtrans_adapter, None)

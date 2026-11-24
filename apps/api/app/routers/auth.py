@@ -37,6 +37,7 @@ from app.core.security import (
     verify_password,
 )
 from app.core.totp import build_otpauth_uri, generate_totp_secret, verify_totp
+from app.models.api_key import APIKey
 from app.models.subscription import Subscription
 from app.models.user import User
 from app.models.workspace import Workspace
@@ -446,6 +447,10 @@ def delete_my_account(
                 "Cannot delete account while you are the sole MANAGER of an active workspace."
             )
 
+    db.query(APIKey).filter(
+        APIKey.created_by_user_id == current_user.id,
+        APIKey.is_active.is_(True),
+    ).update({"is_active": False}, synchronize_session=False)
     db.query(WorkspaceMember).filter(WorkspaceMember.user_id == current_user.id).delete()
     current_user.status = "SUSPENDED"
     current_user.email = f"deleted-{current_user.id}@deleted.vulnflow.local"

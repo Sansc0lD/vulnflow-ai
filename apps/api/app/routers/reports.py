@@ -1,6 +1,7 @@
 """ReportRouter — PLAN.md FASE 4.7 (SDD §2.6.1.5; EC-15/EC-16/EC-17)."""
 
 import json
+import time
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, Protocol
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_workspace_role
 from app.core.exceptions import (
+    ConflictError,
     QuotaExhaustedError,
     ResourceNotFoundError,
     ValidationFailedError,
@@ -201,14 +203,36 @@ def compile_pdf(
                     "report_id": None,
                     "error_message": None,
                 }
-                redis_client.set(
-                    f"job:report:{job_id}",
-                    json.dumps(initial_job),
-                    ex=_JOB_STATUS_TTL_SECONDS,
-                )
+                initial_json = json.dumps(initial_job)
+                try:
+                    redis_client.set(
+                        f"job:report:{job_id}",
+                        initial_json,
+                        ex=_JOB_STATUS_TTL_SECONDS,
+                        nx=True,
+                    )
+                except TypeError:
+                    if redis_client.get(f"job:report:{job_id}") is None:
+                        redis_client.set(
+                            f"job:report:{job_id}",
+                            initial_json,
+                            ex=_JOB_STATUS_TTL_SECONDS,
+                        )
             except Exception:
                 lock.release("in_progress")
                 raise
+
+    if job_id == "in_progress":
+        for _ in range(5):
+            time.sleep(0.05)
+            candidate = lock.current_holder()
+            if candidate and candidate != "in_progress":
+                job_id = candidate
+                break
+        if not job_id or job_id == "in_progress":
+            raise ConflictError(
+                "Report compilation is currently being queued; please retry shortly."
+            )
 
     return CompilePDFAcceptedResponse(
         job_id=job_id,
