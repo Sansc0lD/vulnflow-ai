@@ -47,6 +47,6 @@ class AuditLog(Base):
     # suspends accounts (`users.status`) rather than deleting them.
     actor_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
     action: Mapped[str] = mapped_column(String(50), nullable=False)
-    target_entity: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_entity: Mapped[str] = mapped_column(String(128), nullable=False)
     ip_address: Mapped[str] = mapped_column(String(45), nullable=False)
     details: Mapped[dict[str, Any]] = mapped_column(JSONVariant, nullable=False)

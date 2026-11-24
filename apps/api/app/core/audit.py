@@ -37,8 +37,8 @@ def record_audit_log(
     entry = AuditLog(
         workspace_id=workspace_id,
         actor_user_id=actor_user_id,
-        action=action,
-        target_entity=target_entity,
+        action=action[:50],
+        target_entity=target_entity[:128],
         ip_address=ip_address[:45],
         details=details,
     )
