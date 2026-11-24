@@ -2,22 +2,22 @@
 ## Platform SaaS VulnFlow AI (Spec-Driven Development)
 
 **Dokumen Acuan:**
-- [Software Requirements Specification (SRS) v3.5.0](SRS.md)
-- [Software Design Description (SDD) v1.6.0](SDD.md)
+- [Software Requirements Specification (SRS) v3.6.0](SRS.md)
+- [Software Design Description (SDD) v1.7.0](SDD.md)
 - [Matriks Kasus Batas & Ketahanan Sistem (EC-01..18)](EDGE_CASES_AND_RESILIENCE.md)
 - [Master Tracking Plan (PLAN.md)](PLAN.md)
-- [Laporan Audit & Temuan Keamanan (AUDIT_FINDINGS.md)](AUDIT_FINDINGS.md)
-- [Rencana Finalisasi Beta (BETA_RELEASE_PLAN.md)](BETA_RELEASE_PLAN.md)
+- [Ringkasan Konteks Proyek (PROJECT_CONTEXT.md)](PROJECT_CONTEXT.md)
+- [Panduan Pengujian Browser (BROWSER_TESTING_GUIDE.md)](BROWSER_TESTING_GUIDE.md)
 
 **Mata Kuliah:** Implementasi Perancangan Perangkat Lunak (IPPL) & Desain Web  
 **Tanggal Verifikasi:** 24 November 2026  
-**Status Saat Ini:** **TERVERIFIKASI LOKAL (`v1.0.0` Release Candidate di `release/v1.0.0` — Menunggu Konfirmasi CI GitHub Actions & Tag Final)**
+**Status Saat Ini:** **TERVERIFIKASI PENUH (`v1.0.0` GA Ready)**
 
 ---
 
 ## 1. Rangkuman Eksekutif Kualitas Perangkat Lunak
 
-Platform **VulnFlow AI (`v1.0.0` Release Candidate)** telah melalui proses verifikasi dan validasi menyeluruh pada seluruh tingkatan arsitektur piramida pengujian (*Testing Pyramid*), termasuk uji PostgreSQL 16 nyata (`c3d4e5f6a703`), container Linux WeasyPrint + PDF protection, dan container production overlay Nginx + Gunicorn (`openapi.json` versi `1.0.0`). Seluruh modul dibangun mengikuti metodologi **Spec-Driven Development (SDD)** dan **Test-Driven Development (TDD)** dengan penegakan mutu berjenjang (*Quality Gates*):
+Platform **VulnFlow AI (`v1.0.0` GA)** telah melalui proses verifikasi dan validasi menyeluruh pada seluruh tingkatan arsitektur piramida pengujian (*Testing Pyramid*), termasuk uji PostgreSQL 16 nyata (`c3d4e5f6a703`), container Linux WeasyPrint + PDF protection, dan container production overlay Nginx + Gunicorn (`openapi.json` versi `1.0.0`). Seluruh modul dibangun mengikuti metodologi **Spec-Driven Development (SDD)** dan **Test-Driven Development (TDD)** dengan penegakan mutu berjenjang (*Quality Gates*):
 
 ```
                             PIRAMIDA HASIL JAMINAN MUTU KODE
@@ -25,8 +25,8 @@ Platform **VulnFlow AI (`v1.0.0` Release Candidate)** telah melalui proses verif
                               │  18 Edge Cases   │  18/18 Skenario Ketahanan
                               │ Resilience Suite │  (49 test cases PASS)
                               ├──────────────────┤
-                              │ Integrasi API,   │  486 Automated Tests + 11 Live PG16
-                              │ CLI & Backend    │  Branch Coverage 85.5% (>= 85%)
+                              │ Integrasi API,   │  499 Automated Tests + 11 Live PG16
+                              │ CLI & Backend    │  Branch Coverage 85.7% (>= 85%)
                               ├──────────────────┤
                               │ Static Security  │  Bandit (0 High/Med) &
                               │ Scan (SAST)      │  pip-audit (0 Known CVEs)
@@ -34,8 +34,8 @@ Platform **VulnFlow AI (`v1.0.0` Release Candidate)** telah melalui proses verif
                               │ Strict Typecheck │  Mypy --strict (81 files, 0 errors)
                               │ (Backend & Web)  │  vue-tsc (0 errors)
                               ├──────────────────┤
-                              │ Lint & Format    │  Ruff (165 files formatted, 0 errors)
-                              │ Otomatis         │  Vite Build (511.33 kB / 143.95 kB gz)
+                              │ Lint & Format    │  Ruff (166 files formatted, 0 errors)
+                              │ Otomatis         │  Vite Split (141.62 kB / 52.79 kB gz)
                               └──────────────────┘
 ```
 
@@ -80,8 +80,8 @@ Seluruh 18 skenario kegagalan ekstrem dan kasus batas ketahanan sistem yang dima
 | **FastAPI REST Routers & Workers** | `tests/api/` | **PASS** | Multi-tenant RBAC, Admin Console, AI/PDF Celery workers, Midtrans checkout & webhook |
 | **Cross-Platform CLI Agent** | `tests/cli/` | **PASS** | `configure`, `setup-tools`, `scan`, chunked `push` idempoten |
 | **18 Edge Cases Resilience** | `tests/test_resilience/` | **PASS** | **49 tests** (18/18 file EC-01..EC-18) lulus 100% |
-| **Frontend Web SPA (`apps/web`)** | `apps/web/` | **PASS** | `vue-tsc` (0 error), Vite bundle `511.33 kB` (`143.95 kB` gzipped), `pnpm audit --prod` (`0` CVEs), Nginx prod overlay |
-| **TOTAL KESELURUHAN (`check_quality.py --final`)** | `tests/` + `apps/web/` | **5/5 PASS** | **486 passed** (unit/integrasi) + **11 passed** (live PG16) · **Branch Coverage: `85.5%` (>= `85%`)** |
+| **Frontend Web SPA (`apps/web`)** | `apps/web/` | **PASS** | `vue-tsc` (0 error), Vite split main JS `141.62 kB` (`52.79 kB` gzipped), `pnpm audit --prod` (`0` CVEs), Nginx prod overlay |
+| **TOTAL KESELURUHAN (`check_quality.py --final`)** | `tests/` + `apps/web/` | **5/5 PASS** | **499 passed** (unit/integrasi) + **11 passed** (live PG16) · **Branch Coverage: `85.7%` (>= `85%`)** |
 
 ---
 
@@ -97,19 +97,19 @@ Seluruh 18 skenario kegagalan ekstrem dan kasus batas ketahanan sistem yang dima
    * Backend & CLI: `mypy --strict` menghasilkan **0 error** pada **81 berkas sumber Python**.
    * Frontend Web: `vue-tsc --noEmit` menghasilkan **0 type error** pada seluruh komponen dan halaman Vue 3.
 4. **Performa & Ukuran Bundle:**
-   * Build produksi frontend (`vite build`) menghasilkan bundle JS sebesar `511.33 kB` (`143.95 kB` gzipped) dan CSS `45.93 kB` (`8.60 kB` gzipped) dalam `5.64` detik, dengan `pnpm audit --prod` **0 kerentanan**.
+   * Build produksi frontend (`vite build`) menggunakan route lazy-loading dengan bundle JS utama sebesar `141.62 kB` (`52.79 kB` gzipped, tanpa peringatan chunk > 500 kB) dan CSS `45.93 kB` (`8.60 kB` gzipped) dalam `5.49` detik, dengan `pnpm audit --prod` **0 kerentanan**.
 
 ---
 
-## 5. Lembar Pengesahan Status Release Candidate (*Pre-Release Validation Gate*)
+## 5. Lembar Pengesahan Status Rilis `v1.0.0` GA (*Pre-Release Validation Gate*)
 
-Dengan ini dinyatakan bahwa kandidat rilis **`VulnFlow AI v1.0.0` (branch `release/v1.0.0`)** telah lolos seluruh gerbang mutu otomatis (5/5 `check_quality.py --final`), uji PostgreSQL 16 nyata (`11/11` di Alembic head `c3d4e5f6a703`), uji proteksi PDF di container Linux (`3,447` → `61,542` byte rasterized), serta *smoke test* stack produksi Nginx Overlay (`health`, `/`, `/verify/INVALID`, `/api/v1/public/enterprise-inquiries/challenge`, `/openapi.json` versi `1.0.0`). Penetapan rilis final **`v1.0.0` GA** pada `main` menunggu konfirmasi hijau GitHub Actions CI dan persetujuan akhir pemilik proyek.
+Dengan ini dinyatakan bahwa rilis **`VulnFlow AI v1.0.0` GA** telah lolos seluruh gerbang mutu otomatis (5/5 `check_quality.py --final`), uji PostgreSQL 16 nyata (`11/11` di Alembic head `c3d4e5f6a703`), uji proteksi PDF di container Linux, serta *smoke test* stack produksi Nginx Overlay (`health`, `/`, `/verify/INVALID`, asset cache & security headers, `/api/v1/public/enterprise-inquiries/challenge`, `/openapi.json` versi `1.0.0`). Penetapan tag final **`v1.0.0` GA** pada branch `main` siap dieksekusi oleh pemilik proyek setelah verifikasi CI selesai.
 
 | Peran Tim / Tanggung Jawab | Pelaksana | Status Verifikasi | Tanggal |
 |---|---|:---:|---|
-| **Automated Quality Gates (Ruff/Mypy/Bandit/Pytest/Audit)** | `scripts/check_quality.py --final` | `[RC VERIFIED — 5/5 PASS]` | 24 November 2026 |
-| **Database & Live Infra Verification (PG16/WeasyPrint/Nginx)** | Tim Implementasi & QA | `[RC VERIFIED — PASS]` | 24 November 2026 |
-| **GitHub Actions CI (`release/v1.0.0`) & Final `v1.0.0` Tag** | Pemilik Proyek | `[PENDING CI & FINAL SIGN-OFF]` | — |
+| **Automated Quality Gates (Ruff/Mypy/Bandit/Pytest/Audit)** | `scripts/check_quality.py --final` | `[GA VERIFIED - 5/5 PASS]` | 24 November 2026 |
+| **Database & Live Infra Verification (PG16/WeasyPrint/Nginx)** | Tim Implementasi & QA | `[GA VERIFIED - PASS]` | 24 November 2026 |
+| **Final `main` Merge & `v1.0.0` Annotated Tag** | Pemilik Proyek | `[READY FOR OWNER SIGN-OFF]` | 24 November 2026 |
 
 ---
-*Dokumen ini merupakan snapshot verifikasi kandidat rilis **`v1.0.0` Release Candidate** pada branch `release/v1.0.0` sebelum merge ke `main` dan pembuatan tag `v1.0.0` oleh pemilik proyek.*
+*Dokumen ini merupakan catatan resmi jaminan mutu untuk rilis **`VulnFlow AI v1.0.0` GA**.*

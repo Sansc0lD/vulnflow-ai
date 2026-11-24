@@ -21,11 +21,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
   - Free-tier 180 DPI page rasterization (`pypdfium2` + `Pillow`), `pikepdf` permission lock, optional `pyHanko` PAdES DocMDP certification, PNG QR provenance (`segno`), and public `/verify/:code` verification.
 - **Web SPA, Billing & Superadmin Portal**:
   - 6 public routes (`/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`, `/verify/:code?`) and authenticated `/app/*` workspace dashboard + isolated `/app/admin` console (`AI Usage`, `Users`, `Workspaces & Plans`, `Audit Logs`).
-  - Midtrans Snap PRO subscription checkout (`ORD-{hex}-{ts}` within 50-char limit), fail-closed SHA-512 webhook verification, and sales-led Enterprise inquiry flow protected by Cloudflare Turnstile / signed Math-HMAC CAPTCHA (`captcha_service.py`).
+  - Authenticated `/app/admin` console and `/app/settings` workspace switcher enforcing `MAX_FREE_WORKSPACES_PER_USER = 1` personal Free workspace limit per user.
+  - Midtrans Snap PRO subscription checkout (`ORD-{hex}-{ts}-{rand}` within 50-char limit), fail-closed SHA-512 webhook verification, and sales-led Enterprise inquiry flow protected by Cloudflare Turnstile / signed Math-HMAC CAPTCHA (`captcha_service.py`).
 - **Production Packaging & CI**:
   - Multi-stage Nginx SPA + Gunicorn overlay (`docker-compose.prod.yml`), GitHub Actions CI pipeline (`.github/workflows/ci.yml`), and full 18 Edge Case resilience suite (`EC-01`..`EC-18`).
 
-### Fixed
+### Fixed & Hardened
+- Raised `BatchIngestRequest.findings` schema limit to `50,000` to align contract validation with workspace quota enforcement.
+- Unified owner-password PDF permission locking with optional `pyHanko` PAdES DocMDP signing in `pdf_protector.py` so locked Free-tier PDFs sign without `PdfWriteError`.
+- Enforced `User.status == "ACTIVE"` and active non-`VIEWER` workspace membership in CLI `X-API-Key` authentication, automatically revoking stale keys on account deletion, member removal, or `VIEWER` demotion.
+- Protected `ENTERPRISE` subscriptions from conflicting Midtrans checkouts or webhook downgrades, cleared stale Midtrans tokens on admin tier overrides, and bounded CAPTCHA fallback challenge state with TTL cleanup and trusted-proxy IP checks.
+- Eliminated Redis initial-state overwrite races (`nx=True` status initialization on async report/AI dispatches, lock contention retry in PDF compilation), restricted AI telemetry aggregation to the current UTC month, mapped curation/invite concurrency conflicts to HTTP `409`, and stored durable S3 `storage_path` keys with fresh presigned report download URLs.
+- Fixed Web SPA async polling leaks, unmount/project-switch race conditions, logged-in `?invite=` redirect flow, and added Vue route-level lazy loading (eliminating the `> 500 kB` chunk warning).
+- Hardened CLI API URL normalization, error handling for archive provisioning and Nmap XML parsing, dev/prod Docker volume isolation (`volumes: !reset []`), and Nginx `/assets/` security response headers.
 - Widened `audit_logs.target_entity` from `VARCHAR(50)` to `VARCHAR(128)` via migration `c3d4e5f6a703` so entity identifiers such as `enterprise_inquiry:<uuid>` never trigger `StringDataRightTruncation` on PostgreSQL 16.
 - Aligned `GeminiLLMAdapter` default model constant (`DEFAULT_GEMINI_MODEL`) to `gemini-3-flash-preview` to match `.env.example` and live AI Studio E2E verification.
 - Wired package `__version__` (`1.0.0`) into `FastAPI(version=__version__)` so `/openapi.json` reports the live release version.

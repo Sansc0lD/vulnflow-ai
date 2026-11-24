@@ -76,7 +76,7 @@ Karena autentikasi menggunakan `localStorage` per origin, gunakan trik berikut a
 
 | Fitur / Halaman | Public | `VIEWER` | `PENTESTER` | `MANAGER` | `SUPERADMIN` |
 |:--- |:---:|:---:|:---:|:---:|:---:|
-| Rute Publik (`/`, `/about`, `/solutions`, `/contact`, `/verify/:code?`) | Ya | Ya | Ya | Ya | Ya |
+| Rute Publik (`/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`, `/verify/:code?`) | Ya | Ya | Ya | Ya | Ya |
 | `/app/dashboard` (`Overview`) | - | Read | Read | Read | Redirect `/app/admin` |
 | `/app/projects` (`New project` & `Edit`) | - | Read | Create/Edit | Create/Edit + `Project Lead` | Redirect `/app/admin` |
 | `/app/triage`: tambah temuan / ubah status / kurasi | - | Read-only | Ya | Ya | Redirect `/app/admin` |
@@ -96,7 +96,7 @@ Karena autentikasi menggunakan `localStorage` per origin, gunakan trik berikut a
 
 ## Skenario 1 — Public Visitor (Tanpa Login)
 
-Uji 5 halaman publik Desain Web sebelum login:
+Uji 6 halaman publik Desain Web sebelum login:
 
 1. **Landing Page — `http://localhost:5173/`**
    - Uji tab tahapan alur kerja (`01 Import`, `02 Draft`, `03 Export`).
@@ -137,6 +137,7 @@ Uji 5 halaman publik Desain Web sebelum login:
    - **Workspace name:** `Garuda Cyber Security`
    - **Password:** `Str0ng!Passw0rd2026` (min. 8 karakter, ada huruf besar, kecil, angka, dan simbol)
 3. Klik submit. Pastikan langsung masuk ke `/app/dashboard` dengan sidebar menampilkan `Garuda Cyber Security (Manager)` dan badge `Free`.
+   - *(Catatan kebijakan kuota: setiap akun dibatasi maksimal **1 workspace `FREE` pribadi** (`MAX_FREE_WORKSPACES_PER_USER = 1`). Pembuatan workspace `FREE` kedua lewat Workspace Switcher akan ditolak dengan pesan batas kuota, sedangkan workspace tambahan tetap dapat diikuti via undangan tim atau upgrade paket.)*
 
 ### B. Membuat Proyek & Rules of Engagement (`/app/projects`)
 1. Klik menu **`Projects`** → klik **`New project`**.

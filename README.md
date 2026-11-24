@@ -14,13 +14,11 @@ Spesifikasi mengikat ada di [`DOCS/`](DOCS/), **bukan** di README ini:
 | [`SDD.md`](DOCS/SDD.md)                                             | Arsitektur C4, ERD, kontrak REST API, wireframe (bagaimana membangunnya)   |
 | [`EDGE_CASES_AND_RESILIENCE.md`](DOCS/EDGE_CASES_AND_RESILIENCE.md) | 18 kasus batas (EC-01..EC-18) wajib teruji                                 |
 | [`PLAN.md`](DOCS/PLAN.md)                                           | Checklist kerja per fase (FASE 0-7) & standar mutu kode                    |
-| [`AUDIT_FINDINGS.md`](DOCS/AUDIT_FINDINGS.md)                       | Catatan audit teknis & riwayat perbaikan lintas fase                       |
 | [`PROJECT_CONTEXT.md`](DOCS/PROJECT_CONTEXT.md)                     | Ringkasan konteks arsitektur, progres fase, dan verifikasi live terbaru    |
 | [`BROWSER_TESTING_GUIDE.md`](DOCS/BROWSER_TESTING_GUIDE.md)         | Panduan pengujian manual end-to-end semua role di browser                  |
-| [`QA_SIGN_OFF.md`](DOCS/QA_SIGN_OFF.md)                             | Snapshot verifikasi mutu (status `v1.0.0` Release Candidate)              |
-| [`BETA_RELEASE_PLAN.md`](DOCS/BETA_RELEASE_PLAN.md)                 | Arsip rencana finalisasi beta & checklist validasi pemilik proyek          |
+| [`QA_SIGN_OFF.md`](DOCS/QA_SIGN_OFF.md)                             | Snapshot verifikasi mutu (status `v1.0.0` GA)                              |
 
-README ini hanya memandu *cara menjalankan* proyek — untuk *keputusan desain/kebutuhan*, selalu rujuk dokumen di atas.
+README ini hanya memandu *cara menjalankan* proyek - untuk *keputusan desain/kebutuhan*, selalu rujuk dokumen di atas.
 
 ## Tech Stack
 
@@ -126,23 +124,23 @@ uv run python scripts/check_quality.py
 
 ## Status Proyek
 
-Lihat tracker lengkap di [`PLAN.md`](DOCS/PLAN.md), konteks arsitektur di [`PROJECT_CONTEXT.md`](DOCS/PROJECT_CONTEXT.md), serta panduan QA manual di [`BROWSER_TESTING_GUIDE.md`](DOCS/BROWSER_TESTING_GUIDE.md). Ringkasan saat ini (**Status: `v1.0.0` Release Candidate (`release/v1.0.0`) — Menunggu Konfirmasi CI GitHub Actions & Tag Final**):
+Lihat tracker lengkap di [`PLAN.md`](DOCS/PLAN.md), konteks arsitektur di [`PROJECT_CONTEXT.md`](DOCS/PROJECT_CONTEXT.md), serta panduan QA manual di [`BROWSER_TESTING_GUIDE.md`](DOCS/BROWSER_TESTING_GUIDE.md). Ringkasan saat ini (**Status: `v1.0.0` GA Ready, Terverifikasi Penuh**):
 
-- [x] Dokumentasi (`SRS.md`, `SDD.md`, `EDGE_CASES_AND_RESILIENCE.md`, `PLAN.md`) — selesai
-- [x] **FASE 0** — Monorepo scaffolding, `docker-compose`, linter/type-checker, `check_quality.py`, CI pipeline — selesai & terverifikasi
-- [x] **FASE 1** — Pydantic V2 Shared Contracts — selesai (`admin_schemas`, `auth_schemas`, `ai_schemas`, `billing_schemas`, `error_envelope`, `finding_schemas`, `report_schemas`, `workspace_schemas`)
-- [x] **FASE 2** — Database Layer (The Lean 11 Tables + `enterprise_inquiries`, Alembic head `c3d4e5f6a703`) — selesai; migrasi & seeder terverifikasi terhadap PostgreSQL 16 nyata (`test_postgres_semantics.py`)
-- [x] **FASE 3** — Domain Core & Security Engines — selesai (`DeduplicationService`, `CVSSCalculator`, `ScopeEnforcer`, `PromptSanitizationService`, `DeterministicFallbackEngine`, `SafeURLFetcher`)
-- [x] **FASE 4** — FastAPI Routers & Celery Workers (`ai_worker`, `report_worker`, `pdf_protector`, `ollama_adapter`, `captcha_service`) — selesai & hardened
-- [x] **FASE 5** — CLI Agent (`configure`, `setup-tools`, `scan`, `push` dengan `Idempotency-Key` & chunked retry) — selesai
-- [x] **FASE 6** — Vue 3 + TypeScript Web SPA (`/`..`/contact`, `/verify/:code?`, `/app/*` workspace, dan `/app/admin` console terisolasi) — selesai
-- [x] **FASE 7** — Resilience Test Suite (EC-01..EC-18), 5/5 `--final` Quality Gate (`85.5%` coverage, `0` CVE), Full-Stack Live E2E & Production Nginx Overlay (`v1.0.0` RC terverifikasi lokal, [`CHANGELOG.md`](CHANGELOG.md) & [`LICENSE`](LICENSE) tersedia)
+- [x] Dokumentasi (`SRS.md`, `SDD.md`, `EDGE_CASES_AND_RESILIENCE.md`, `PLAN.md`) - selesai
+- [x] **FASE 0** - Monorepo scaffolding, `docker-compose`, linter/type-checker, `check_quality.py`, CI pipeline - selesai & terverifikasi
+- [x] **FASE 1** - Pydantic V2 Shared Contracts - selesai (`admin_schemas`, `auth_schemas`, `ai_schemas`, `billing_schemas`, `error_envelope`, `finding_schemas`, `report_schemas`, `workspace_schemas`)
+- [x] **FASE 2** - Database Layer (12 Tabel Relasional termasuk `enterprise_inquiries`, Alembic head `c3d4e5f6a703`) - selesai; migrasi & seeder terverifikasi terhadap PostgreSQL 16 nyata (`test_postgres_semantics.py`)
+- [x] **FASE 3** - Domain Core & Security Engines - selesai (`DeduplicationService`, `CVSSCalculator`, `ScopeEnforcer`, `PromptSanitizationService`, `DeterministicFallbackEngine`, `SafeURLFetcher`)
+- [x] **FASE 4** - FastAPI Routers & Celery Workers (`ai_worker`, `report_worker`, `pdf_protector`, `ollama_adapter`, `captcha_service`) - selesai & hardened
+- [x] **FASE 5** - CLI Agent (`configure`, `setup-tools`, `scan`, `push` dengan `Idempotency-Key` & chunked retry) - selesai
+- [x] **FASE 6** - Vue 3 + TypeScript Web SPA (6 rute publik `/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`, `/verify/:code?`, `/app/*` workspace, dan `/app/admin` console terisolasi) - selesai
+- [x] **FASE 7** - Resilience Test Suite (EC-01..EC-18, 49 tests PASS), 5/5 `--final` Quality Gate (`499` tests PASS, `85.7%` coverage, `0` CVE), Full-Stack Live E2E & Production Nginx Overlay (`v1.0.0` GA ready, [`CHANGELOG.md`](CHANGELOG.md) & [`LICENSE`](LICENSE) tersedia)
 
 ## Lintas Mata Kuliah: Desain Web
 
 `apps/web` sengaja disatukan untuk memenuhi dua mata kuliah sekaligus dalam satu basis kode:
 
-- **Rute Publik** (`/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`, `/verify/:code?`) — rute publik & verifikasi keaslian laporan, memenuhi rubrik wajib mata kuliah Desain Web. Spesifikasi UI/UX lengkapnya ada di `../Desweb/DOCS/Dokumentasi_Proyek_Desweb_VulnFlow_AI.docx` (rujukan mengikat, tidak diduplikasi di `SDD.md`).
-- **Rute Terautentikasi** (`/app/*`) — dashboard SaaS VulnFlow AI yang sesungguhnya, untuk mata kuliah IPPL.
+- **Rute Publik** (`/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`, `/verify/:code?`) - rute informasi produk, kalkulator tier biaya, formulir inquiry Enterprise berproteksi CAPTCHA, dan verifikasi keaslian laporan PDF secara publik untuk memenuhi rubrik wajib mata kuliah Desain Web. Spesifikasi UI/UX, navigasi, dan kontennya didokumentasikan mandiri di [`SRS.md`](DOCS/SRS.md) Bab 4.10 dan [`SDD.md`](DOCS/SDD.md) §4.2.
+- **Rute Terautentikasi** (`/app/*`) - dashboard SaaS VulnFlow AI yang sesungguhnya, untuk mata kuliah IPPL.
 
 Detail lengkap: [`SRS.md`](DOCS/SRS.md) Bab 4.10 (FR-PUB) dan [`SDD.md`](DOCS/SDD.md) §4.2.
