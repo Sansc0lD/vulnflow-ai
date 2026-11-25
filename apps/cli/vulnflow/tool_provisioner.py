@@ -37,7 +37,13 @@ class ToolProvisioningError(Exception):
 def resolve_latest_nuclei_version(client: httpx.Client) -> str:
     response = client.get(_LATEST_RELEASE_API_URL)
     response.raise_for_status()
-    tag_name: str = response.json()["tag_name"]
+    try:
+        payload = response.json()
+        tag_name = str(payload["tag_name"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ToolProvisioningError(
+            "Unexpected GitHub releases API response while resolving Nuclei version."
+        ) from exc
     return tag_name.removeprefix("v")
 
 
@@ -49,22 +55,27 @@ def build_download_url(env: TargetEnvironment, version: str) -> str:
 
 
 def _extract_expected_binary(archive_path: Path, member_name: str, dest_dir: Path) -> None:
-    with zipfile.ZipFile(archive_path) as zip_ref:
-        try:
-            info = zip_ref.getinfo(member_name)
-        except KeyError as exc:
-            raise ToolProvisioningError(
-                f"Downloaded archive does not contain the expected binary '{member_name}'."
-            ) from exc
+    try:
+        with zipfile.ZipFile(archive_path) as zip_ref:
+            try:
+                info = zip_ref.getinfo(member_name)
+            except KeyError as exc:
+                raise ToolProvisioningError(
+                    f"Downloaded archive does not contain the expected binary '{member_name}'."
+                ) from exc
 
-        destination = (dest_dir / member_name).resolve()
-        if dest_dir.resolve() not in destination.parents and destination != dest_dir.resolve():
-            # Unreachable while member_name is one of our own hardcoded
-            # constants (never read from the archive), kept as an explicit,
-            # tested guard rather than relying on that invariant silently.
-            raise ToolProvisioningError(f"Refusing to extract unsafe path: {member_name!r}")
+            destination = (dest_dir / member_name).resolve()
+            if dest_dir.resolve() not in destination.parents and destination != dest_dir.resolve():
+                # Unreachable while member_name is one of our own hardcoded
+                # constants (never read from the archive), kept as an explicit,
+                # tested guard rather than relying on that invariant silently.
+                raise ToolProvisioningError(f"Refusing to extract unsafe path: {member_name!r}")
 
-        zip_ref.extract(info, dest_dir)
+            zip_ref.extract(info, dest_dir)
+    except zipfile.BadZipFile as exc:
+        raise ToolProvisioningError(
+            "Downloaded Nuclei archive is corrupted or not a valid zip file."
+        ) from exc
 
 
 def ensure_tools_installed(

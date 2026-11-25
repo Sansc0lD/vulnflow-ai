@@ -1,6 +1,6 @@
 [project]
 name = "vulnflow-ai"
-version = "0.1.0"
+version = "1.0.0"
 description = "VulnFlow AI - SaaS Vulnerability Management & Reporting Assistant (IPPL)"
 requires-python = ">=3.12"
 dependencies = []

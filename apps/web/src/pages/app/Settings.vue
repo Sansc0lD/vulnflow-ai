@@ -630,7 +630,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Loader2 } from 'lucide-vue-next'
 import AppLayout from '@/components/layout/AppLayout.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
@@ -648,6 +648,7 @@ import {
 import { session } from '@/stores/session'
 import { toast } from '@/stores/toast'
 
+const route = useRoute()
 const router = useRouter()
 
 const tabs = [
@@ -711,7 +712,8 @@ const revokeKeyTarget = ref<APIKeySummary | null>(null)
 const revokingKey = ref(false)
 const cliConfigureCommand = computed(() => {
   if (!createdRawKey.value || !session.state.activeWorkspaceId) return ''
-  return `vulnflow configure --token ${createdRawKey.value.api_key} --workspace ${session.state.activeWorkspaceId} --api-url ${window.location.origin}`
+  const apiOrigin = import.meta.env.VITE_API_PUBLIC_URL || window.location.origin
+  return `vulnflow configure --token ${createdRawKey.value.api_key} --workspace ${session.state.activeWorkspaceId} --api-url ${apiOrigin}`
 })
 
 // Audit
@@ -758,9 +760,14 @@ async function loadTeamAndKeys(): Promise<void> {
     } catch {
       apiKeys.value = []
     }
+  } else {
+    apiKeys.value = []
   }
   if (isManager.value) {
     await loadAuditLogs(0)
+  } else {
+    auditLogs.value = []
+    auditTotal.value = 0
   }
 }
 
@@ -784,6 +791,17 @@ async function loadAuditLogs(offset = 0): Promise<void> {
     loadingAudits.value = false
   }
 }
+
+watch(
+  () => route.query.invite,
+  (val) => {
+    if (typeof val === 'string' && val.trim() && !isSuperadmin.value) {
+      activeTab.value = 'team'
+      acceptTokenInput.value = val.trim()
+    }
+  },
+  { immediate: true }
+)
 
 watch(
   () => session.state.activeWorkspaceId,
@@ -851,6 +869,9 @@ const handleRoleChange = async (member: WorkspaceMember, event: Event) => {
   try {
     await api.workspaces.updateMemberRole(wId, member.user_id, nextRole)
     member.role = nextRole
+    if (member.user_id === session.state.user?.id) {
+      await session.hydrate(true)
+    }
     toast.success(`Updated role for ${member.full_name} to ${formatRole(nextRole)}.`)
   } catch (err: unknown) {
     selectEl.value = member.role
@@ -867,6 +888,9 @@ const confirmRemoveMember = async () => {
     await api.workspaces.removeMember(wId, member.user_id)
     members.value = members.value.filter((m) => m.user_id !== member.user_id)
     removeMemberTarget.value = null
+    if (member.user_id === session.state.user?.id) {
+      await session.hydrate(true)
+    }
     toast.success(`${member.full_name} removed from workspace.`)
   } catch (err: unknown) {
     toast.error(err instanceof Error ? err.message : 'Unable to remove member.')

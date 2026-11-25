@@ -258,10 +258,20 @@ def enqueue_narrative_generation(
             "narrative_id": None,
             "error_message": None,
         }
+        initial_json = json.dumps(initial_job)
         with __import__("contextlib").suppress(RedisError, OSError):
-            redis_client.set(
-                f"job:ai:{job_id}", json.dumps(initial_job), ex=_AI_JOB_STATUS_TTL_SECONDS
-            )
+            try:
+                redis_client.set(
+                    f"job:ai:{job_id}",
+                    initial_json,
+                    ex=_AI_JOB_STATUS_TTL_SECONDS,
+                    nx=True,
+                )
+            except TypeError:
+                if redis_client.get(f"job:ai:{job_id}") is None:
+                    redis_client.set(
+                        f"job:ai:{job_id}", initial_json, ex=_AI_JOB_STATUS_TTL_SECONDS
+                    )
 
     return AINarrativeAcceptedResponse(
         job_id=job_id,

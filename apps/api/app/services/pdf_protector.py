@@ -90,7 +90,7 @@ def lock_pdf_permissions(pdf_bytes: bytes, *, owner_password: str | None = None)
     return out.getvalue()
 
 
-def sign_pdf_pades(pdf_bytes: bytes) -> tuple[bytes, bool]:
+def sign_pdf_pades(pdf_bytes: bytes, *, owner_password: str | None = None) -> tuple[bytes, bool]:
     """Digitally certify PDF with pyHanko DocMDP (P=1) when signing cert/key env vars exist."""
     cert_path = os.environ.get("PDF_SIGNING_CERT_PATH", "").strip()
     key_path = os.environ.get("PDF_SIGNING_KEY_PATH", "").strip()
@@ -113,6 +113,8 @@ def sign_pdf_pades(pdf_bytes: bytes) -> tuple[bytes, bool]:
     )
     in_buf = io.BytesIO(pdf_bytes)
     writer = IncrementalPdfFileWriter(in_buf)
+    if owner_password and writer.security_handler is not None:
+        writer.encrypt(owner_password)  # type: ignore[no-untyped-call]
     meta = signers.PdfSignatureMetadata(
         field_name="VulnFlowSeal",
         md_algorithm="sha256",
@@ -136,15 +138,17 @@ def protect_report_pdf(pdf_bytes: bytes, *, is_free_tier: bool) -> tuple[bytes, 
     processed = pdf_bytes
     is_rasterized = False
     is_signed = False
+    owner_password: str | None = None
 
     looks_like_real_pdf = pdf_bytes.lstrip().startswith(b"%PDF") and len(pdf_bytes) > 64
     if is_free_tier and looks_like_real_pdf:
+        owner_password = secrets.token_urlsafe(24)
         processed = rasterize_pdf_bytes(processed, dpi=180)
-        processed = lock_pdf_permissions(processed)
+        processed = lock_pdf_permissions(processed, owner_password=owner_password)
         is_rasterized = True
 
     if looks_like_real_pdf:
-        processed, is_signed = sign_pdf_pades(processed)
+        processed, is_signed = sign_pdf_pades(processed, owner_password=owner_password)
 
     sha256_hash = hashlib.sha256(processed).hexdigest()
     return processed, sha256_hash, is_rasterized, is_signed

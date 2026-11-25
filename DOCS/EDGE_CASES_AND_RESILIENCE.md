@@ -1,8 +1,8 @@
 # MATRIKS KASUS BATAS, KETAHANAN SISTEM & RENCANA PENGUJIAN
 ## (SYSTEM RESILIENCE, EDGE CASES MITIGATION & QA TEST PLAN)
 
-**Platform:** VulnFlow AI (SaaS Vulnerability Management & Reporting Assistant)  
-**Dokumen Induk:** [Software Requirements Specification (SRS) v3.5.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SRS.md) & [Software Design Description (SDD) v1.6.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SDD.md)  
+**Platform:** VulnFlow AI (SaaS Vulnerability Management & Reporting Assistant - v1.0.0)  
+**Dokumen Induk:** [Software Requirements Specification (SRS) v3.6.0](SRS.md) & [Software Design Description (SDD) v1.7.0](SDD.md)  
 **Standar Acuan:** IEEE Std 1016:2009 (Software Design), ISO/IEC 25010:2023 (Fault Tolerance & Reliability), ISO/IEC/IEEE 29119 (Software Testing)  
 **Status Dokumen:** **Resmi & Mengikat Implementasi Kode (Single Source of Truth for QA & Robustness)**
 
@@ -26,7 +26,7 @@ Sistem dirancang mengacu pada 4 prinsip utama ketahanan perangkat lunak:
 Pengguna platform VulnFlow AI menggunakan beragam sistem operasi (Windows 10/11, macOS Intel & Apple Silicon M-series, serta berbagai distribusi Linux). Banyak pengguna pemula atau auditor di workstation korporat tidak memiliki tools scanner (Nmap atau Nuclei) terpasang di sistem mereka.
 
 ### 2.2 Mekanisme Deteksi & Pengunduhan Otomatis (`vulnflow setup-tools`)
-CLI Agent (`apps/cli`) dibangun dengan Python 3.10+ murni dan memanfaatkan pustaka bawaan `platform` untuk mendeteksi lingkungan eksekusi secara deterministik tanpa dependensi eksternal:
+CLI Agent (`apps/cli`, Python `>=3.12` dengan `typer`, `rich`, `httpx`, `defusedxml`) memanfaatkan pustaka bawaan `platform` untuk mendeteksi lingkungan eksekusi secara deterministik, lalu mengunduh biner Nuclei via `httpx` (`tool_provisioner.py`) dengan mengekstrak hanya satu anggota arsip yang namanya diketahui eksplisit (anti path-traversal):
 
 ```python
 import platform
@@ -114,8 +114,8 @@ Dalam etika pengujian penetrasi profesional, pemindaian terhadap aset tanpa izin
 2. **Definisi Jangka Waktu ROE (`roe_start_date` s.d. `roe_end_date`):** Sistem memvalidasi apakah pengunggahan log temuan berada dalam rentang waktu kontrak yang legal.
 3. **Penyimpanan Dokumen Kontrak:** Pengguna dapat mengunggah berkas NDA / Surat Tugas bertanda tangan digital (PDF) sebagai lampiran resmi proyek.
 
-### 3.2 Verifikasi Kepemilikan Domain untuk Pemindaian Cloud (*Domain Ownership Verification*)
-Jika pengguna menginisiasi pemindaian langsung dari dashboard web (fitur *Web Quick Scan*):
+### 3.2 Verifikasi Kepemilikan Domain untuk Pemindaian Cloud (*Domain Ownership Verification — Post-v1.0 Roadmap*)
+> *Catatan Rilis v1.0.0:* Sesuai batasan v1.0.0 bahwa pemindaian aktif hanya dijalankan secara lokal melalui CLI Agent pentester, fitur *Web Quick Scan* berbasis cloud dijadwalkan untuk rilis pasca-v1.0 (*post-v1.0*). Rancangan mekanisme di bawah ini disimpan sebagai referensi desain masa depan:
 - **Metode A (DNS TXT Challenge):** Sistem menghasilkan token unik acak, misal `vulnflow-verification=vfv_9a8b7c6d`. Klien memasang DNS TXT record pada `_vulnflow.targetapp.com`. Backend melakukan DNS lookup untuk memvalidasi kepemilikan.
 - **Metode B (HTTP Well-Known Token):** Klien menaruh berkas teks pada `https://targetapp.com/.well-known/vulnflow-token.txt`. Backend melakukan HTTP GET sederhana untuk mencocokkan token.
 
@@ -211,7 +211,7 @@ def compute_dedup_hash(
 
 ### 5.3 Penanganan Kasus EC-15 & EC-16: Distributed Lock & Kompensasi Kuota
 ```python
-# apps/api/routers/reports.py
+# Ilustrasi rancangan EC-15 (implementasi aktual: apps/api/app/routers/reports.py)
 from fastapi import APIRouter, HTTPException, status
 from redis import Redis
 
@@ -262,7 +262,7 @@ def compile_pdf(w_id: str, p_id: str, redis: Redis, db_session):
 ```
 
 ```python
-# apps/api/workers/report_tasks.py
+# Ilustrasi rancangan EC-16 (implementasi aktual: apps/api/app/workers/report_worker.py)
 @celery_app.task(bind=True)
 def render_pdf_task(self, w_id: str, p_id: str):
     try:
@@ -281,7 +281,7 @@ def render_pdf_task(self, w_id: str, p_id: str):
 
 ### 5.4 Penanganan Kasus EC-17: Regenerasi Tautan Presigned URL Otomatis
 ```python
-# apps/api/routers/reports.py
+# Ilustrasi rancangan EC-15 (implementasi aktual: apps/api/app/routers/reports.py)
 @router.get("/workspaces/{w_id}/reports/{report_id}/download")
 def download_report_proxy(w_id: str, report_id: str, current_user, s3_client, db_session):
     report = db_session.query(Report).filter_by(id=report_id).first()

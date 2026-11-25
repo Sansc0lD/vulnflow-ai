@@ -4,12 +4,13 @@ from collections.abc import Generator
 
 import pytest
 from app.core.dependencies import authenticate_api_key
-from app.core.exceptions import AuthenticationError
+from app.core.exceptions import AuthenticationError, PermissionDeniedError
 from app.core.security import generate_api_key
 from app.models.api_key import APIKey
 from app.models.base import Base
 from app.models.user import User
 from app.models.workspace import Workspace
+from app.models.workspace_member import WorkspaceMember
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
@@ -23,11 +24,19 @@ def session() -> Generator[Session, None, None]:
     engine.dispose()
 
 
-def _make_api_key(session: Session, *, is_active: bool = True) -> tuple[str, Workspace]:
-    user = User(email="auditor@example.com", password_hash="h", full_name="A")
+def _make_api_key(
+    session: Session,
+    *,
+    is_active: bool = True,
+    user_status: str = "ACTIVE",
+    member_role: str | None = "PENTESTER",
+) -> tuple[str, Workspace]:
+    user = User(email="auditor@example.com", password_hash="h", full_name="A", status=user_status)
     workspace = Workspace(name="Agensi")
     session.add_all([user, workspace])
     session.commit()
+    if member_role is not None:
+        session.add(WorkspaceMember(workspace_id=workspace.id, user_id=user.id, role=member_role))
     raw_key, key_hash = generate_api_key()
     session.add(
         APIKey(
@@ -80,3 +89,17 @@ def test_authenticate_api_key_rejects_wrong_workspace(session: Session) -> None:
 
     with pytest.raises(AuthenticationError):
         authenticate_api_key(raw_key, other_workspace.id, session)
+
+
+def test_authenticate_api_key_rejects_suspended_owner(session: Session) -> None:
+    raw_key, workspace = _make_api_key(session, user_status="SUSPENDED")
+
+    with pytest.raises(AuthenticationError):
+        authenticate_api_key(raw_key, workspace.id, session)
+
+
+def test_authenticate_api_key_rejects_demoted_viewer_or_removed_member(session: Session) -> None:
+    raw_key, workspace = _make_api_key(session, member_role="VIEWER")
+
+    with pytest.raises(PermissionDeniedError):
+        authenticate_api_key(raw_key, workspace.id, session)

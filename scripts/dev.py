@@ -85,13 +85,13 @@ def _wait_for_socket(host: str, port: int, timeout_sec: float = 10.0) -> bool:
 
 
 def _ensure_docker_services() -> bool:
-    """Attempt to bring up docker-compose services if docker is available."""
+    """Attempt to bring up infra docker-compose services if docker is available."""
     docker_bin = shutil.which("docker")
     if not docker_bin:
         return False
     try:
         res = subprocess.run(  # nosec: B603
-            [docker_bin, "compose", "up", "-d"],
+            [docker_bin, "compose", "up", "-d", "postgres", "redis", "minio", "mailpit"],
             cwd=ROOT,
             capture_output=True,
             check=False,
@@ -559,7 +559,7 @@ def cmd_status(args: argparse.Namespace) -> int:
         ("Mailpit Web UI", "127.0.0.1", int(os.environ.get("MAILPIT_UI_PORT", 8025))),
     ]
     for name, host, port in services:
-        if _is_port_in_use(host, port):
+        if _wait_for_socket(host, port, timeout_sec=0.8):
             print(f"  [✓] {name}: listening on {host}:{port}")
         else:
             print(f"  [✗] {name}: not reachable on {host}:{port} (run 'docker compose up -d')")

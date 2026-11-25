@@ -2,28 +2,28 @@
 
 ## Platform SaaS VulnFlow AI (Spec-Driven Development)
 
-**Dokumen Acuan:** [SRS v3.5.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SRS.md) | [SDD v1.6.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SDD.md) | [Edge Cases & Resilience](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/EDGE_CASES_AND_RESILIENCE.md)  
+**Dokumen Acuan:** [SRS v3.6.0](SRS.md) | [SDD v1.7.0](SDD.md) | [Edge Cases & Resilience](EDGE_CASES_AND_RESILIENCE.md)  
 **Metodologi:** **Spec-Driven Development (Contract-First / API-First)**  
-**Status Proyek:** **FASE 7 Selesai (Seluruh FASE 0-7 Selesai 100% — QA Signed-Off)**  
-**Terakhir Diperbarui:** 8 November 2026
+**Status Proyek:** **v1.0.0 GA Ready (Seluruh FASE 0-7 + Release Hardening Selesai — QA Signed-Off)**  
+**Terakhir Diperbarui:** 24 November 2026
 
 ---
 
 ## 1. Indikator Kemajuan Proyek (*Overall Progress Tracker*)
 
 ```text
-[████████████████████████████████████████████████████████████████] 100.00% (Seluruh Dokumen + FASE 0-7 SELESAI LENGKAP)
-- Spesifikasi Kebutuhan (SRS v3.5.0)           : [x] SELESAI (100%)
-- Desain Arsitektur Sistem (SDD v1.6.0)        : [x] SELESAI (100%)
+[████████████████████████████████████████████████████████████████] 100.00% (Seluruh Dokumen + FASE 0-7 + v1.0.0 Hardening SELESAI)
+- Spesifikasi Kebutuhan (SRS v3.6.0)           : [x] SELESAI (100%)
+- Desain Arsitektur Sistem (SDD v1.7.0)        : [x] SELESAI (100%)
 - Matriks Kasus Batas & Ketahanan (EC-01..18) : [x] SELESAI (100%)
 - Fase 0: Monorepo Scaffolding & Environment   : [x] SELESAI (100%, 6/6 sub-tugas)
-- Fase 1: Pydantic V2 Shared Contracts         : [x] SELESAI (100%, 35 unit test, coverage 94.3%)
-- Fase 2: Database Layer (The Lean 11 Tables)  : [x] SELESAI (100%, 6/6 sub-tugas, 59 unit test, coverage 97.3%)
-- Fase 3: Domain Core & Security Engines       : [x] SELESAI (100%, 6/6 sub-tugas, 120 test case, coverage 96.7%)
-- Fase 4: FastAPI Routers & Celery Worker      : [x] SELESAI (100%, 330 test, 91.4% cov) — SELURUH TEMUAN AUDIT (2 CRITICAL + 16 HIGH + 25 MED + 24 LOW) TELAH DIPERBAIKI & DIVERIFIKASI (lihat AUDIT_FINDINGS.md §5)
-- Fase 5: CLI Agent Lintas Platform            : [x] SELESAI (100%, 6/6 sub-tugas, 62 test baru, 91.5% cov gabungan) — lihat §FASE 5 di bawah
-- Fase 6: Web Dashboard SPA (Vue 3 + shadcn-vue): [x] SELESAI (100%, 15/15 sub-tugas, 5 rute publik Desweb + 5 wireframes SaaS IPPL, vue-tsc 0 errors, build Vite 100% clean)
-- Fase 7: QA & Resilience Test Suite           : [x] SELESAI (100%, 7.1 s.d. 7.4 selesai — 18/18 EC resilience files, 49/49 tests PASS, QA Sign-Off terverifikasi)
+- Fase 1: Pydantic V2 Shared Contracts         : [x] SELESAI (100%, shared schemas incl. billing/admin/workspace)
+- Fase 2: Database Layer (12 Tables, c3d4e5f6a703): [x] SELESAI (100%, + 11 live PostgreSQL 16 semantics tests)
+- Fase 3: Domain Core & Security Engines       : [x] SELESAI (100%, + stack-aware sanitizer & monthly telemetry)
+- Fase 4: FastAPI Routers & Celery Workers     : [x] SELESAI (100%, + ai_worker, pdf_protector, captcha_service, Ollama VPC)
+- Fase 5: CLI Agent Lintas Platform            : [x] SELESAI (100%, configure, setup-tools, scan, idempotent push)
+- Fase 6: Web Dashboard SPA (Vue 3 + Tailwind) : [x] SELESAI (100%, 6 rute publik + /app/* + /app/admin, lazy-loaded routes, vue-tsc 0 errors)
+- Fase 7: QA, Resilience Suite & Prod Overlay  : [x] SELESAI (100%, 18/18 EC resilience files, Nginx overlay, GitHub Actions CI, QA Sign-Off)
 ```
 
 ---
@@ -66,9 +66,8 @@ Untuk memastikan kode bersih, aman dari kerentanan (*secure by design*), bebas *
 
 | Perkakas               | Kategori         | Peran & Standar Konfigurasi                                                                 | Toleransi Galat    |
 |:---------------------- |:---------------- |:------------------------------------------------------------------------------------------- |:------------------:|
-| **`ESLint`**           | *Linter JS/TS/Vue* | Menegakkan aturan `typescript-eslint` dan `eslint-plugin-vue` (`vue/setup-compiler-macros`, aturan Composition API).  | **0 Error**        |
-| **`Prettier`**         | *Code Formatter* | Format konsisten (termasuk berkas `.vue`) + `prettier-plugin-tailwindcss` untuk sorting class Tailwind CSS otomatis. | **100% Formatted** |
-| **`vue-tsc`**          | *Type Checking*  | `vue-tsc --noEmit` dengan `strict: true` untuk menjamin tidak ada `any` yang lolos, termasuk tipe di dalam `<script setup lang="ts">`. | **0 Type Errors**  |
+| **`vue-tsc`**          | *Type Checking*  | `vue-tsc --noEmit` untuk pengecekan statis TypeScript ketat (`strict: true`), termasuk komponen `<script setup lang="ts">`. | **0 Type Errors**  |
+| **`Vite + pnpm audit`**| *Bundle & Audit* | Code-splitting per route (`vite build`) tanpa chunk warning `> 500 kB` + `pnpm audit --prod`. | **0 CVEs / Clean Build** |
 
 ### 2.3 Skrip Pemeriksa Kualitas Otomatis Mandiri (`scripts/check_quality.py`)
 
@@ -143,9 +142,9 @@ $ python scripts/check_quality.py
 
 ---
 
-### FASE 2: Arsitektur Basis Data & Migrasi Relasional (*The Lean 11 Tables*)
+### FASE 2: Arsitektur Basis Data & Migrasi Relasional (*12 Tabel Relasional — Head `c3d4e5f6a703`*)
 
-> **Tujuan:** Mengimplementasikan 11 model relasional SQLAlchemy 2.0 (Sync mode) dan inisialisasi Alembic, mengacu penuh pada **SDD Bab 2.4.2 (Kamus Data Teknis) tanpa deviasi** — daftar kolom pada tiap tabel di bawah ini hanya contoh ilustratif/kolom yang paling krusial, bukan spesifikasi kolom yang lengkap; implementasi wajib menyalin skema penuh dari Kamus Data SDD.
+> **Tujuan:** Mengimplementasikan 11 model inti SDD §2.4.2 ditambah tabel ke-12 `enterprise_inquiries`, kolom pelacakan `tech_stack`, provenance PDF (`verification_code`, `sha256_hash`, `is_rasterized`, `is_signed`), token breakdown AI, dan `audit_logs.target_entity VARCHAR(128)` (`a1b2c3d4e501` → `b2c3d4e5f602` → `c3d4e5f6a703`).
 
 - [x] **2.1** Konfigurasi koneksi basis data & session factory di `apps/api/app/core/database.py`.
 - [x] **2.2** Inisialisasi Alembic migrations (`apps/api/migrations/`).
@@ -266,8 +265,8 @@ $ python scripts/check_quality.py
 > - Celah CRITICAL tenant isolation pada `routers/triage.py` & `routers/ai.py` telah diperbaiki fail-closed.
 > - Seluruh celah HIGH (Midtrans fail-open & nominal check, auth revocation, Celery task inclusion, DB row locking, quota reset, invitation replay protection, IDOR assign-lead, prompt injection tone, sanitizer wiring, ROE datetime timezone, CVSS vector pattern) telah diperbaiki dengan pengetesan komprehensif.
 > - Seluruh celah MEDIUM & LOW (distributed lock compare-and-delete, WeasyPrint watermark fixed diagonal @page, Gemini header auth, SafeFetcher CGNAT & redirect guard, workspace count limit, quality gates hardening) telah diselesaikan.
-> - Suite pengujian meningkat menjadi **330 test lolos (100% pass, 0 fail)** dengan coverage **91.4%**.
-> - Skrip `uv run python scripts/check_quality.py` lolos seluruh 5 gerbang mutu (Ruff, Mypy strict, Bandit, Pytest coverage >= 85%, pip-audit) dengan `[SUCCESS] Seluruh Quality Gates Lolos! Kode siap di-commit.` Lihat `DOCS/AUDIT_FINDINGS.md` §5 untuk rincian lengkap perbaikan per ID.
+> - Suite pengujian FASE 4 selesai **100% pass** dan dipelihara bersama suite lengkap `v1.0.0`.
+> - Skrip `uv run python scripts/check_quality.py --final` lolos seluruh 5 gerbang mutu (Ruff, Mypy `--strict`, Bandit, Pytest coverage >= 85%, pip-audit 0 CVE) dengan `[SUCCESS] Seluruh Quality Gates Lolos! Kode siap di-commit.`
 
 ---
 
@@ -277,59 +276,50 @@ $ python scripts/check_quality.py
 
 - [x] **5.1** Setup CLI Entrypoint via `Typer` & `Rich` (`apps/cli/vulnflow/main.py`).
 - [x] **5.2** Perintah `vulnflow configure`:
-  - [x] Simpan token API dan active workspace ke `~/.vulnflow/config.json` (EC-01).
-- [x] **5.3** Perintah `vulnflow setup-tools` (lihat EDGE_CASES_AND_RESILIENCE.md §2: Arsitektur Biner Lintas Platform CLI):
+  - [x] Simpan token API dan active workspace ke `~/.vulnflow/config.json` (EC-01), termasuk normalisasi URL dasar (`normalize_api_url`).
+- [x] **5.3** Perintah `vulnflow setup-tools` (lihat [EDGE_CASES_AND_RESILIENCE.md](EDGE_CASES_AND_RESILIENCE.md) §2: Arsitektur Biner Lintas Platform CLI):
   - [x] Deteksi otomatis OS & CPU (`platform.system()`, `platform.machine()`).
-  - [x] Download otomatis biner resmi Nuclei dari GitHub Releases ke `~/.vulnflow/bin/` (via `httpx`, bukan `urllib.request`, dan ekstraksi hanya anggota arsip yang namanya persis diketahui — lihat MED-07).
+  - [x] Download otomatis biner resmi Nuclei dari GitHub Releases ke `~/.vulnflow/bin/` via `httpx` dengan ekstraksi satu anggota arsip terverifikasi (anti path-traversal & proteksi zip rusak).
 - [x] **5.4** Perintah `vulnflow scan`:
   - [x] Wrapper eksekusi pemindaian lokal dengan biner Nuclei (`subprocess.run(..., shell=False)`, `runner` dependency-injected untuk testability).
 - [x] **5.5** Parser Streaming JSONL & Nmap XML:
-  - [x] Parser membaca file per baris (*JSON Lines*), tahan terhadap interupsi `Ctrl+C` (EC-06).
-  - [x] Parser Nmap XML menggunakan `defusedxml` (pencegah XML Entity Expansion).
+  - [x] Parser membaca file per baris (*JSON Lines*), tahan terhadap interupsi `Ctrl+C` (EC-06) serta normalisasi vektor non-CVSS 3.1.
+  - [x] Parser Nmap XML menggunakan `defusedxml` (pencegah XML Entity Expansion & penanganan XML rusak yang rapi).
 - [x] **5.6** Perintah `vulnflow push`:
-  - [x] HTTPX client dengan *auto-retry 3x backoff* dan header `Idempotency-Key` (EC-07) — gate per-request diimplementasikan di `routers/ingest.py` via Redis (lihat AUDIT_FINDINGS.md §5 F5-GAP-01).
+  - [x] HTTPX client dengan *auto-retry 3x backoff* dan header `Idempotency-Key` (EC-07) — gate per-request diimplementasikan di `routers/ingest.py` via Redis.
   - [x] *Graceful degradation:* Notifikasi interaktif jika temuan > 50 item pada paket Free (EC-10).
 
-**Status FASE 5 (1 November 2026):** SELESAI — 58 test baru di `tests/cli/`, 2 test baru di `tests/core/test_redis_client.py`, 2 test baru (idempotensi) di `tests/api/test_ingest_router.py`. Seluruh gerbang mutu (`scripts/check_quality.py`) hijau, coverage 91.5%. Detail temuan baru (satu gap backend EC-07 yang ditemukan & diperbaiki saat membangun `push`, satu LOW yang dicatat tapi sengaja tidak diperbaiki) ada di `AUDIT_FINDINGS.md` §5.
+**Status FASE 5 (Terverifikasi s.d. `v1.0.0` GA):** SELESAI — seluruh sub-tugas lulus (`tests/cli/`, `tests/core/test_redis_client.py`, `tests/api/test_ingest_router.py`).
 
 ---
 
 ### FASE 6: Web Dashboard SPA (`apps/web`)
 
-> **Tujuan:** Mengimplementasikan antarmuka web modern berbasis Vue 3 (Composition API), Tailwind CSS, dan shadcn-vue. Stack ini sengaja disatukan dengan rubrik wajib mata kuliah Desain Web (Vue 3 Composition API, Vue Router, minimal 5 halaman/8 komponen — lihat `Desweb/DOCS/Minimum Recruitment Proyek Desain Web.md` & `Desweb/DOCS/Dokumentasi_Proyek_Desweb_VulnFlow_AI.docx`), sehingga **satu basis kode `apps/web` ini memenuhi kebutuhan kedua mata kuliah sekaligus**. Pemenuhan ini ditegaskan di tingkat rute, bukan sekadar jumlah: `apps/web` terdiri dari dua kelompok rute yang hidup berdampingan dalam satu router Vue yang sama —
-> 1. **Rute Publik (`/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`)** — tidak memerlukan login, berisi 5 halaman wajib Desweb (Home+Live Sandbox demo, Architecture 4-Node, Triage Catalog **mock data**, Finding Detail mock, Audit Booking+simulator Midtrans) sesuai UC-01 s.d. UC-05a pada dokumentasi Desweb di atas — dokumen tersebut menjadi rujukan tunggal untuk detail UI/UX halaman publik ini (tidak diduplikasi di SDD).
-> 2. **Rute Terautentikasi (`/app/*`)** — mengharuskan sesi JWT valid (route guard, lihat 6.1), berisi dashboard SaaS VulnFlow AI yang sesungguhnya (Wireframe 1–5 di SDD §4.2 / sub-tugas 6.9–6.15 di bawah) sesuai kebutuhan fungsional IPPL.
+> **Tujuan:** Mengimplementasikan antarmuka web modern berbasis Vue 3 (Composition API), Tailwind CSS, Vite, dan Vue Router. Stack ini sengaja disatukan dengan rubrik wajib mata kuliah **Desain Web** (Vue 3 Composition API, Vue Router, multi-halaman publik & navigasi) dan kebutuhan fungsional platform SaaS **IPPL**, sehingga **satu basis kode `apps/web` ini memenuhi kebutuhan kedua mata kuliah sekaligus** melalui pemisahan dua kelompok rute:
+> 1. **Rute Publik (`/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`, `/verify/:code?`)** — 6 halaman publik tanpa login (Home + Optical Privacy Lens, Alur Kerja 4 Tahap, Katalog Triase mock, Detail Temuan + kalkulator CVSS/dekripsi demo mock, Kalkulator Paket & Enterprise Inquiry ber-CAPTCHA, serta Verifikasi Provenance PDF).
+> 2. **Rute Terautentikasi (`/app/*`, `/app/admin`)** — memerlukan sesi JWT valid (*navigation guard* + universal TOTP Superadmin), melayani seluruh alur operasional SaaS IPPL serta konsol tata kelola Superadmin.
 
-- [x] **6.1** Setup Project Vue 3 (Composition API) + Vite + Tailwind CSS + shadcn-vue + Vue Router (`apps/web/src/router/index.ts`):
-  - [x] Struktur folder mengikuti istilah rubrik Desweb secara literal: `src/assets/`, `src/components/`, `src/pages/` (bukan `src/views/`), `src/router/`, `src/styles/`, `App.vue`.
-  - [x] Navigation guard (`router.beforeEach`) yang membedakan rute Publik (bebas akses) vs rute `/app/*` (wajib JWT valid, redirect ke `/app/login` jika tidak).
+- [x] **6.1** Setup Project Vue 3 (Composition API) + Vite + Tailwind CSS + Vue Router (`apps/web/src/router/index.ts`, lazy-loaded per route untuk code-splitting):
+  - [x] Struktur folder: `src/components/`, `src/pages/public/`, `src/pages/app/`, `src/router/`, `src/stores/`, `src/services/`, `src/styles/`, `App.vue`.
+  - [x] Navigation guard (`router.beforeEach`) yang membedakan rute Publik (bebas akses) vs rute `/app/*` (wajib JWT valid), `/app/admin` (wajib Superadmin), serta forwarding undangan `/app/register?invite=...` bagi pengguna yang sudah login.
 - [x] **6.2** API Client terintegrasi dengan shared Pydantic types (`apps/web/src/services/api.ts`).
 
-#### Rute Publik (Desweb — tanpa login, `src/pages/public/`)
-- [x] **6.3** `/` Home & Live Sandbox: hero section + kanvas Split-Conduit (toggle Sanitizer Mode) sesuai UC-01 Desweb.
-- [x] **6.4** `/about` Security Architecture: diagram pipa 4-Node yang dapat diklik (Local CLI → Scope Gateway → AI Sanitizer → WeasyPrint Engine) sesuai UC-02 Desweb.
-- [x] **6.5** `/solutions` Triage Catalog (mock): layout Master-Detail 40/60 dengan data mock (bukan API asli), search bar, filter badge keparahan, sesuai UC-03 Desweb.
-- [x] **6.6** `/solutions/:id` Finding Detail (mock): radar chart CVSS interaktif, tab remediation & PoC mock, modal dekripsi PoC (UC-04/UC-04a Desweb).
-- [x] **6.7** `/contact` Audit Booking: slider kalkulator jumlah aset, formulir NDA, modal simulasi Midtrans Snap (UC-05/UC-05a Desweb) — **simulasi lead-gen untuk calon klien, terpisah dari billing langganan asli di 6.13**.
-- [x] **6.8** Navbar & Footer publik berfungsi penuh di seluruh 5 rute di atas (memenuhi item "Navigasi" rubrik Desweb).
+#### Rute Publik (Desain Web — tanpa login, `src/pages/public/`)
+- [x] **6.3** `/` Home & Optical Privacy Lens demo interaktif (`Shielded` vs `Unfiltered`).
+- [x] **6.4** `/about` Alur Kerja 4 Tahap Interaktif (`Stage 01/04` s.d. `04/04`).
+- [x] **6.5** `/solutions` Triage Catalog (mock data murni sisi klien, search & filter severity).
+- [x] **6.6** `/solutions/:id` Finding Detail (mock): radar/kalkulator CVSS v3.1 interaktif & modal dekripsi demo.
+- [x] **6.7** `/contact` Estimator Paket & Formulir Enterprise Inquiry dengan verifikasi anti-bot CAPTCHA (Turnstile / Math-HMAC).
+- [x] **6.8** `/verify/:code?` Verifikasi keaslian laporan PDF publik (QR/checksum + status integritas).
 
 #### Dashboard Terautentikasi (IPPL — wajib login, `/app/*`, `src/pages/app/`)
-> Penomoran "Wireframe N" di bawah ini mengikuti SDD §4.2 secara persis (5 wireframe resmi); halaman pendukung (Login/Registrasi, Workspace/Proyek) bukan bagian dari penomoran itu, diberi label terpisah agar tidak diklaim sebagai wireframe yang sama.
-- [x] **6.9** Halaman Login & Registrasi (MFA modal ready).
-- [x] **6.10** Halaman Ruang Kerja & Pembuatan Proyek (Definisi Target Scope & ROE).
+- [x] **6.9** Halaman Login, Registrasi, Forgot/Reset Password (universal TOTP MFA modal ready).
+- [x] **6.10** Manajemen Ruang Kerja (Switcher + batas 1 workspace pribadi Free) & Proyek (`Target Tech Stack`, Target Scope, ROE).
 - [x] **6.11** Wireframe 1 (SDD §4.2.1): Dasbor Utama & Sebaran Metrik CVSS.
-- [x] **6.12** Wireframe 2 (SDD §4.2.2): Papan Triase & Grid Temuan Interaktif:
-  - [x] Filter keparahan, pencarian CWE, modal editor PoC.
-  - [x] Modal Kalkulator CVSS v3.1 interaktif.
-  - [x] Inline dropdown triase status temuan.
-- [x] **6.13** Wireframe 3 (SDD §4.2.3): Editor Interaktif Tinjauan Narasi AI (WYSIWYG) — UC-12:
-  - [x] Rich-text editor, server-side HTML sanitization (stored XSS guard).
-  - [x] Dialog peringatan sebelum "Re-generate AI" menimpa editan manual.
-- [x] **6.14** Wireframe 4 (SDD §4.2.4): Branding & Theme Studio:
-  - [x] Pengatur palet heksadesimal, upload logo, live WYSIWYG preview sampul laporan.
-- [x] **6.15** Wireframe 5 (SDD §4.2.5): Billing & Simulator Midtrans Snap (langganan asli — berbeda dari simulator lead-gen di 6.7):
-  - [x] Tampilan pemantauan kuota laporan real-time.
-  - [x] Integrasi pop-up modal Snap simulator (QRIS / Virtual Account).
+- [x] **6.12** Wireframe 2 (SDD §4.2.2): Papan Triase, PoC Terenkripsi + Upload Screenshot PNG, Kalkulator CVSS v3.1, & Kurasi Laporan.
+- [x] **6.13** Wireframe 3 (SDD §4.2.3): Editor Interaktif Narasi AI Asinkron + Human-in-the-loop Review (`UC-12`).
+- [x] **6.14** Wireframe 4 (SDD §4.2.4): Branding, Logo Agensi, Kontrol Seksi PDF & Preview Sampul (`ThemeStudio.vue`).
+- [x] **6.15** Wireframe 5 (SDD §4.2.5): Billing Midtrans Snap + Enterprise Inquiry (`Billing.vue`) serta Console Superadmin 4-Tab (`/app/admin`).
 
 ---
 
@@ -360,7 +350,7 @@ $ python scripts/check_quality.py
   - [x] `test_ec17_presigned_url_dynamic_regeneration.py`
   - [x] `test_ec18_midtrans_webhook_idempotency.py`
 - [x] **7.3** Verifikasi Akhir Quality Gate:
-  - [x] Jalankan verifikasi manual Quality Gates $\rightarrow$ 100% PASS (Ruff 0 errors, Mypy 0 errors, Bandit 0 issues, 361 tests PASS).
+  - [x] Jalankan verifikasi manual Quality Gates (`uv run python scripts/check_quality.py --final`) $\rightarrow$ 5/5 PASS (Ruff 0 errors, Mypy 0 errors across 81 files, Bandit 0 issues, 499 tests PASS + 49/49 resilience tests PASS, 85.7% coverage).
 - [x] **7.4** Dokumentasi Pengujian & Lembar Tanda Tangan QA Sign-Off (`DOCS/QA_SIGN_OFF.md`).
 
 ---

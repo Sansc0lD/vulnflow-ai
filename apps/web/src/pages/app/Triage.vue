@@ -1034,12 +1034,19 @@ const resetFilters = () => {
   offset.value = 0
 }
 
+let triageFetchSeq = 0
+let triagePoCSeq = 0
+
 async function fetchFindings(): Promise<void> {
+  const seq = ++triageFetchSeq
   const wId = session.state.activeWorkspaceId
   const pId = session.state.activeProjectId
   if (!wId || !pId) {
     findings.value = []
     totalCount.value = 0
+    summary.value = { total: 0, curated: 0, quarantined: 0, by_severity: {}, by_status: {} }
+    drawerFinding.value = null
+    pocData.value = null
     return
   }
 
@@ -1058,6 +1065,13 @@ async function fetchFindings(): Promise<void> {
       limit,
       offset: offset.value,
     })
+    if (
+      seq !== triageFetchSeq ||
+      session.state.activeWorkspaceId !== wId ||
+      session.state.activeProjectId !== pId
+    ) {
+      return
+    }
     findings.value = res.items
     totalCount.value = res.total
     summary.value = res.summary
@@ -1075,9 +1089,13 @@ async function fetchFindings(): Promise<void> {
       }
     }
   } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'Unable to load project findings.')
+    if (seq === triageFetchSeq) {
+      toast.error(err instanceof Error ? err.message : 'Unable to load project findings.')
+    }
   } finally {
-    loading.value = false
+    if (seq === triageFetchSeq) {
+      loading.value = false
+    }
   }
 }
 
@@ -1263,6 +1281,7 @@ const confirmUnquarantine = async () => {
 }
 
 const openFindingDrawer = async (f: Finding) => {
+  const pocSeq = ++triagePoCSeq
   drawerFinding.value = f
   pocData.value = null
   if (!canTriage.value) return
@@ -1273,17 +1292,32 @@ const openFindingDrawer = async (f: Finding) => {
 
   pocLoading.value = true
   try {
-    pocData.value = await api.findings.getPoC(wId, pId, f.id)
+    const res = await api.findings.getPoC(wId, pId, f.id)
+    if (
+      pocSeq !== triagePoCSeq ||
+      drawerFinding.value?.id !== f.id ||
+      session.state.activeWorkspaceId !== wId ||
+      session.state.activeProjectId !== pId
+    ) {
+      return
+    }
+    pocData.value = res
   } catch (err: unknown) {
-    toast.error(err instanceof Error ? err.message : 'Unable to load protected evidence.')
+    if (pocSeq === triagePoCSeq && drawerFinding.value?.id === f.id) {
+      toast.error(err instanceof Error ? err.message : 'Unable to load protected evidence.')
+    }
   } finally {
-    pocLoading.value = false
+    if (pocSeq === triagePoCSeq) {
+      pocLoading.value = false
+    }
   }
 }
 
 const closeFindingDrawer = () => {
+  triagePoCSeq += 1
   drawerFinding.value = null
   pocData.value = null
+  pocLoading.value = false
 }
 
 watch(

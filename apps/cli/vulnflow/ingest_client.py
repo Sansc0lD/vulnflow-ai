@@ -15,6 +15,7 @@ from pathlib import Path
 
 import httpx
 
+from vulnflow.config import normalize_api_url
 from vulnflow_contracts import (
     BatchIngestRequest,
     BatchIngestResponse,
@@ -71,7 +72,8 @@ def push_batch(
     retry_delay_seconds: float = DEFAULT_RETRY_DELAY_SECONDS,
 ) -> BatchIngestResponse:
     payload = BatchIngestRequest(scan_metadata=scan_metadata, findings=findings)
-    url = f"{api_url}/api/v1/workspaces/{workspace_id}/projects/{project_id}/findings/batch"
+    base_url = normalize_api_url(api_url)
+    url = f"{base_url}/api/v1/workspaces/{workspace_id}/projects/{project_id}/findings/batch"
     headers = {"X-VulnFlow-API-Key": api_key, "Idempotency-Key": idempotency_key}
 
     for attempt in range(1, MAX_ATTEMPTS + 1):

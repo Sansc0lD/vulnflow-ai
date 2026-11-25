@@ -98,6 +98,18 @@ class EnterpriseInquiryCreateRequest(BaseModel):
     team_size: str = Field(default="5-20", min_length=1, max_length=50)
     estimated_monthly_reports: int | None = Field(default=None, ge=1, le=100_000)
     requirements: str = Field(min_length=5, max_length=4000)
+    captcha_token: str | None = Field(default=None, max_length=2048)
+    captcha_answer: str | None = Field(default=None, max_length=32)
+
+
+class EnterpriseInquiryChallengeResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["turnstile", "math_hmac"]
+    site_key: str | None = None
+    challenge_token: str | None = None
+    prompt: str | None = None
+    expires_in: int = 600
 
 
 class EnterpriseInquiryUpdateRequest(BaseModel):

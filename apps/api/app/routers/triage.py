@@ -1,5 +1,9 @@
 """TriageRouter — PLAN.md FASE 4.5 (SDD UC-09; EC-11 optimistic locking; EC-12)."""
 
+import contextlib
+import os
+import re
+import urllib.parse
 import uuid
 from typing import Annotated
 
@@ -160,6 +164,51 @@ def list_findings(
     )
 
 
+def _resolve_optional_poc_storage(request: Request | None) -> S3StorageClient | None:
+    if request is not None:
+        override = request.app.dependency_overrides.get(get_poc_upload_storage)
+        if override is not None:
+            return override()  # type: ignore[no-any-return]
+    if not os.environ.get("S3_BUCKET_NAME"):
+        return None
+    try:
+        return get_poc_upload_storage()
+    except Exception:
+        return None
+
+
+def _resolve_poc_attachment_urls(
+    raw_urls: list[str] | None,
+    *,
+    workspace_id: uuid.UUID,
+    project_id: uuid.UUID,
+    finding_id: uuid.UUID,
+    storage: S3StorageClient | None,
+) -> list[str]:
+    if not raw_urls:
+        return []
+    if storage is None:
+        return list(raw_urls)
+    pattern = re.compile(
+        rf"(workspaces/{re.escape(str(workspace_id))}/projects/{re.escape(str(project_id))}/findings/{re.escape(str(finding_id))}/[^/?#\s]+)$"
+    )
+    resolved: list[str] = []
+    for raw in raw_urls:
+        if not raw or str(raw).startswith("data:"):
+            resolved.append(str(raw))
+            continue
+        parsed_path = urllib.parse.urlsplit(str(raw)).path
+        match = pattern.search(parsed_path)
+        if match:
+            with contextlib.suppress(Exception):
+                resolved.append(
+                    storage.generate_presigned_url(match.group(1), expires_in_seconds=900)
+                )
+                continue
+        resolved.append(str(raw))
+    return resolved
+
+
 @router.get("/{finding_id}/poc", response_model=FindingPoCResponse)
 def get_finding_poc(
     workspace_id: uuid.UUID,
@@ -193,11 +242,20 @@ def get_finding_poc(
     )
     db.commit()
 
+    storage = _resolve_optional_poc_storage(request)
+    attachment_urls = _resolve_poc_attachment_urls(
+        poc.attachment_file_urls,
+        workspace_id=workspace_id,
+        project_id=project_id,
+        finding_id=finding.id,
+        storage=storage,
+    )
+
     return FindingPoCResponse(
         finding_id=str(finding.id),
         raw_evidence=raw_evidence,
         reproduction_steps=list(poc.reproduction_steps or []),
-        attachment_file_urls=list(poc.attachment_file_urls or []),
+        attachment_file_urls=attachment_urls,
         key_version=poc.key_version,
     )
 
@@ -244,7 +302,13 @@ def update_finding_curation(
             "unquarantine": payload.unquarantine,
         },
     )
-    db.commit()
+    try:
+        db.commit()
+    except StaleDataError as exc:
+        db.rollback()
+        raise ConflictError(
+            "This finding was modified by another request; reload and retry (EC-11)."
+        ) from exc
     return FindingStatusResponse(
         id=str(finding.id),
         status=FindingStatus(finding.status),
@@ -281,9 +345,9 @@ def upload_poc_attachment(
         f"findings/{finding_id}/{uuid.uuid4()}.{ext}"
     )
     storage.upload_bytes(storage_path, image_bytes, content_type=resolved_ct)
-    attachment_url = storage.generate_presigned_url(storage_path, expires_in_seconds=604800)
+    attachment_url = storage.generate_presigned_url(storage_path, expires_in_seconds=900)
 
-    poc.attachment_file_urls = [*list(poc.attachment_file_urls or []), attachment_url]
+    poc.attachment_file_urls = [*list(poc.attachment_file_urls or []), storage_path]
     record_audit_log(
         db,
         workspace_id=workspace_id,

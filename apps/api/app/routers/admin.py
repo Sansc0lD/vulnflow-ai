@@ -324,8 +324,12 @@ def override_workspace_subscription(
     subscription.monthly_report_quota = payload.monthly_report_quota
     subscription.custom_batch_limit = payload.custom_batch_limit
     subscription.status = "ACTIVE"
+    subscription.midtrans_order_id = None
+    subscription.snap_token = None
     if payload.tier in {"PRO", "ENTERPRISE"}:
         subscription.payment_status = "SETTLEMENT"
+    elif subscription.payment_status in {"PENDING", "EXPIRE", "CANCEL", "DENY"}:
+        subscription.payment_status = "NONE"
 
     record_audit_log(
         db,
@@ -419,3 +423,33 @@ def update_enterprise_inquiry(
     db.commit()
     db.refresh(inquiry)
     return _inquiry_summary(inquiry)
+
+
+@router.delete("/enterprise-inquiries/{inquiry_id}", status_code=204)
+def delete_declined_enterprise_inquiry(
+    inquiry_id: uuid.UUID,
+    request: Request,
+    admin_user: User = Depends(require_superadmin),
+    db: Session = Depends(get_db),
+) -> None:
+    inquiry = db.get(EnterpriseInquiry, inquiry_id)
+    if inquiry is None:
+        raise ResourceNotFoundError("Enterprise inquiry not found.")
+    if inquiry.status != "DECLINED":
+        raise ValidationFailedError("Only DECLINED inquiries can be permanently deleted.")
+
+    record_audit_log(
+        db,
+        workspace_id=inquiry.workspace_id or SYSTEM_WORKSPACE_ID,
+        actor_user_id=admin_user.id,
+        action="ADMIN_ENTERPRISE_INQUIRY_DELETED",
+        target_entity=f"enterprise_inquiry:{inquiry.id}",
+        ip_address=get_client_ip(request),
+        details={
+            "company_name": inquiry.company_name,
+            "contact_email": inquiry.contact_email,
+            "previous_status": inquiry.status,
+        },
+    )
+    db.delete(inquiry)
+    db.commit()

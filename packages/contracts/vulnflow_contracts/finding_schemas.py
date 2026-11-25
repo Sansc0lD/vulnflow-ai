@@ -86,7 +86,7 @@ class BatchIngestRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scan_metadata: ScanMetadata
-    findings: list[UnifiedVulnerabilityFinding] = Field(min_length=1, max_length=500)
+    findings: list[UnifiedVulnerabilityFinding] = Field(min_length=1, max_length=50_000)
 
 
 class BatchIngestResponse(BaseModel):

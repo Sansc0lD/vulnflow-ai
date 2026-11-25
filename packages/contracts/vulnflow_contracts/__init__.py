@@ -37,6 +37,7 @@ from vulnflow_contracts.auth_schemas import (
     WorkspaceRole,
 )
 from vulnflow_contracts.billing_schemas import (
+    EnterpriseInquiryChallengeResponse,
     EnterpriseInquiryCreateRequest,
     EnterpriseInquiryResponse,
     EnterpriseInquiryStatus,
@@ -105,7 +106,7 @@ from vulnflow_contracts.workspace_schemas import (
     WorkspaceUpdateRequest,
 )
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 __all__ = [
     "AIJobStatus",
@@ -129,6 +130,7 @@ __all__ = [
     "CompilePDFAcceptedResponse",
     "CompilePDFRequest",
     "DeleteAccountRequest",
+    "EnterpriseInquiryChallengeResponse",
     "EnterpriseInquiryCreateRequest",
     "EnterpriseInquiryResponse",
     "EnterpriseInquiryStatus",

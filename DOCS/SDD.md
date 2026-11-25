@@ -6,10 +6,10 @@
 **Mata Kuliah:** Implementasi Perancangan Perangkat Lunak (IPPL)  
 **Standar Deskripsi Desain:** IEEE Std 1016:2009 *(Standard for Information Technology — Systems Design — Software Design Descriptions)* & ISO/IEC/IEEE 42010:2011 *(Systems and software engineering — Architecture description)*  
 **Model Notasi Desain:** C4 Model (Context, Container, Component, Code), UML 2.5 (Activity, State Machine, Sequence Diagrams), & Relational ERD  
-**Versi Dokumen:** 1.6.0 (Section 2.6 Heading/ToC Repair Edition)  
-**Status Dokumen:** Disetujui untuk Implementasi Arsitektur  
-**Tanggal Rilis:** 27 September 2026  
-**Dokumen Induk Kebutuhan:** [Software Requirements Specification (SRS) v3.5.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SRS.md)  
+**Versi Dokumen:** 1.7.0 (v1.0.0 GA Release Sync Edition)  
+**Status Dokumen:** Dirilis Resmi (`v1.0.0` GA)  
+**Tanggal Rilis:** 24 November 2026  
+**Dokumen Induk Kebutuhan:** [Software Requirements Specification (SRS) v3.6.0](SRS.md)  
 
 ---
 
@@ -21,8 +21,9 @@
 | 1.1.0 | 27 September 2026 | Penyelarasan komprehensif cetak biru teknis untuk metodologi Spec-Driven Development: Pemetaan keterlacakan use case eksplisit pada seluruh Activity Diagrams; penambahan Activity Diagram ke-4 (AD-04 Swimlane: Onboarding, Multi-Tenancy, Midtrans Snap, & API Key Provisioning); integrasi field payment gateway Midtrans pada ERD dan Kamus Data tabel `subscriptions`; penambahan spesifikasi kontrak REST API Checkout & Webhook Midtrans; penambahan Sequence Diagram ke-4 (SD-04: Transaksi Pembayaran Midtrans Snap & Webhook Callback Asinkron); serta pembaruan Wireframe 5 dengan Pop-up Modal Midtrans Snap. | Tim Rekayasa Perangkat Lunak IPPL |
 | 1.3.0 | 20 Oktober 2026 | Patch konsistensi hasil review pra-implementasi: (1) Koreksi C4 Container Diagram §2.2.1 yang masih menyebut Python 3.11 agar sinkron dengan baseline aktual PLAN.md (Python 3.12+); (2) Perluasan kontrak endpoint ingesti CLI §2.6.1.2 untuk mendefinisikan `Idempotency-Key` per-fragmen (`file_hash:chunk_index`) pada skenario *chunked streaming*, serta penegasan bahwa header ini bukan mekanisme deduplikasi data (tugas itu tetap milik `dedup_hash` per-temuan/EC-08); (3) Update baris EC-07 pada matriks §2.7.1 agar konsisten dengan poin (2). | Tim Rekayasa Perangkat Lunak IPPL |
 | 1.4.0 | 20 Oktober 2026 | Penyatuan stack frontend web: seluruh rujukan React pada C4 Container Diagram (§2.2.2), Swimlane AD-02, Sequence Diagram SD-02/SD-04, dan §4.2 diganti menjadi **Vue 3 (Composition API) + Vue Router**, dengan komponen UI beralih dari shadcn/ui ke **shadcn-vue** (port Vue berbasis Radix Vue, mewarisi desain token yang sama) — menyatukan basis kode web dengan rubrik wajib mata kuliah Desain Web. Tidak ada perubahan pada C4 Component/Code level backend, ERD, kontrak REST API, maupun STRIDE threat model. | Tim Rekayasa Perangkat Lunak IPPL |
-| 1.5.0 | 20 Oktober 2026 | §4.2 kini menegaskan pemisahan rute Publik (tanpa login, 5 halaman wajib Desweb) vs rute Terautentikasi `/app/*` (Wireframe 1–5, dijaga navigation guard JWT) dalam satu router Vue yang sama — merujuk Desweb docx untuk spesifikasi UI/UX halaman publik alih-alih menduplikasinya, serta SRS Bab 4.10 (FR-PUB) untuk keterlacakan kebutuhan fungsional. | Tim Rekayasa Perangkat Lunak IPPL |
-| 1.6.0 | 20 Oktober 2026 | Perbaikan struktur heading §2.6: kontrak Midtrans Billing (sebelumnya `##### 2.6.4`, salah bertingkat di bawah `2.6.2 Antarmuka AI LLM`, dengan `2.6.3` yang hilang) dipindah ke level yang benar sebagai `#### 2.6.3`, dan `Antarmuka Perangkat Lunak dan Jaringan` (sebelumnya `### 2.6.5`) dikoreksi menjadi `#### 2.6.4`. Daftar Isi §2.6 ditulis ulang total agar tautannya mengarah ke heading yang benar (sebelumnya menunjuk ke struktur penomoran lama yang sudah tidak berlaku). Tidak ada perubahan pada isi kontrak JSON itu sendiri. | Tim Rekayasa Perangkat Lunak IPPL |
+| 1.5.0 | 20 Oktober 2026 | §4.2 kini menegaskan pemisahan rute Publik (tanpa login, halaman wajib mata kuliah Desain Web) vs rute Terautentikasi `/app/*` (Wireframe 1–5, dijaga navigation guard JWT) dalam satu router Vue yang sama, serta SRS Bab 4.10 (FR-PUB) untuk keterlacakan kebutuhan fungsional. | Tim Rekayasa Perangkat Lunak IPPL |
+| 1.6.0 | 20 Oktober 2026 | Perbaikan struktur heading §2.6: kontrak Midtrans Billing dipindah ke level `#### 2.6.3`, dan `Antarmuka Perangkat Lunak dan Jaringan` dikoreksi menjadi `#### 2.6.4`. Daftar Isi §2.6 diselaraskan total tanpa perubahan isi kontrak JSON. | Tim Rekayasa Perangkat Lunak IPPL |
+| 1.7.0 | 24 November 2026 | Sinkronisasi arsitektur aktual **v1.0.0 GA**: (1) C4 L2/L3 diperbarui ke Python `>=3.12` CLI, Bearer JWT, **12 tabel relasional** (head Alembic `c3d4e5f6a703` inkl. `enterprise_inquiries`, `projects.tech_stack`, provenance PDF pada `reports`, breakdown token `ai_narratives`, `users.{is_superadmin,totp_secret}`, `audit_logs` tanpa FK workspace dengan `target_entity VARCHAR(128)`), Celery `ai_worker` + `OllamaLLMAdapter`, `pdf_protector`, `captcha_service`, Nginx prod overlay, dan GitHub Actions CI; (2) §4.2 mencantumkan **6 rute publik** (termasuk `/verify/:code?`); (3) pembersihan seluruh tautan file lokal dan rujukan eksternal. | Tim Rekayasa Perangkat Lunak IPPL |
 
 ---
 
@@ -100,7 +101,7 @@ Dokumen *Software Design Description* (SDD) ini dirumuskan sebagai spesifikasi c
 Penyusunan dokumen ini mengacu pada standar internasional **IEEE Std 1016:2009** (*Standard for Information Technology — Systems Design — Software Design Descriptions*) dan **ISO/IEC/IEEE 42010:2011** guna menjamin konsistensi antara kebutuhan fungsional/kualitas yang tertuang dalam dokumen spesifikasi kebutuhan dengan keputusan desain arsitektural.
 
 ### 1.2 Cakupan Desain & Keterkaitan dengan SRS
-Dokumen SDD ini merupakan turunan langsung (*direct realization*) dari dokumen **[Software Requirements Specification (SRS) v3.5.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SRS.md)**. Jika SRS berfokus pada **"APA" (*WHAT*)** yang dibutuhkan oleh pengguna dan domain bisnis, maka SDD ini merinci secara presisi **"BAGAIMANA" (*HOW*)** arsitektur perangkat lunak, struktur data relasional, antarmuka pemrograman (API), diagram sekuensial, dan antarmuka pengguna direkayasa untuk memenuhi kebutuhan tersebut.
+Dokumen SDD ini merupakan turunan langsung (*direct realization*) dari dokumen **[Software Requirements Specification (SRS) v3.6.0](SRS.md)**. Jika SRS berfokus pada **"APA" (*WHAT*)** yang dibutuhkan oleh pengguna dan domain bisnis, maka SDD ini merinci secara presisi **"BAGAIMANA" (*HOW*)** arsitektur perangkat lunak, struktur data relasional, antarmuka pemrograman (API), diagram sekuensial, dan antarmuka pengguna direkayasa untuk memenuhi kebutuhan tersebut.
 
 ### 1.3 Prinsip & Filosofi Arsitektur
 Arsitektur VulnFlow AI dirancang dengan memegang 4 prinsip fundamental rekayasa perangkat lunak:
@@ -175,29 +176,29 @@ Diagram kontainer menguraikan unit-unit eksekusi mandiri, lingkungan runtime, se
 ```mermaid
 flowchart TB
     subgraph ClientSide["Lingkungan Klien (Mesin Lokal Pentester)"]
-        CLIAgent["Local CLI Agent (Python 3.10+ CLI)<br>Typer, Rich, HTTPX, Pydantic"]
+        CLIAgent["Local CLI Agent (Python 3.12+ CLI)<br>Typer, Rich, HTTPX, Pydantic"]
         Scanners["Scanner Binaries (Local Tools)<br>Nmap v7.9+, Nuclei v3+"]
-        Browser["Modern Web Browser (Client SPA Application)<br>Vue 3, Tailwind CSS, Vite"]
+        Browser["Modern Web Browser (Client SPA Application)<br>Vue 3, Tailwind CSS, Vite (Nginx Prod Overlay)"]
     end
 
     subgraph CloudInfrastructure["Infrastruktur Cloud SaaS (VulnFlow Cloud)"]
         ReverseProxy["Reverse Proxy & Gateway (Nginx / Cloudflare)<br>TLS 1.3 Termination, Rate Limiting"]
-        BackendAPI["SaaS Backend Core API (FastAPI Python 3.12+)<br>Auth, Business Logic, Sanitizer, Billing"]
-        ReportWorker["Report & PDF Engine (WeasyPrint Asynchronous Worker)<br>HTML5 to PDF Converter with SSRF Filter"]
+        BackendAPI["SaaS Backend Core API (FastAPI Python 3.12+)<br>Auth, Business Logic, Sanitizer, Billing, CAPTCHA"]
+        ReportWorker["Async Celery Workers (AI + Report/PDF Engine)<br>WeasyPrint 70, pypdfium2/pikepdf/pyHanko/segno, Gemini/Ollama"]
         
-        DB[("PostgreSQL 16 (Relational Database)<br>11 Tables, AES-256-GCM, Declarative Partitioning")]
-        RedisQueue[("Redis 7.2 (In-Memory Broker)<br>Celery Task Queue, Token Blacklist, Metrics")]
-        Storage[("MinIO / AWS S3 (Object Storage)<br>Agency Logos & PDF Artifacts")]
+        DB[("PostgreSQL 16 (Relational Database)<br>12 Tables, AES-256-GCM, Declarative Partitioning")]
+        RedisQueue[("Redis 7.2 (In-Memory Broker)<br>Celery Task Queue, Job State, Prompt Cache, Metrics")]
+        Storage[("MinIO / AWS S3 (Object Storage)<br>Agency Logos, PoC Attachments & PDF Artifacts")]
     end
 
     subgraph ExternalServices["Layanan Pihak Ketiga (External APIs)"]
-        LLMAPI["LLM Provider API (Google Gemini / OpenAI)<br>HTTPS REST (Abstract Metadata Only)"]
+        LLMAPI["LLM Provider API (Google Gemini / VPC Ollama)<br>HTTPS REST (Abstract Metadata + Tech Stack Tags Only)"]
         MidtransAPI["Midtrans Payment Gateway (Snap & Webhooks)<br>HTTPS REST (SHA-512 Signed)"]
     end
 
     Scanners -->|"Raw Logs / Stream Output"| CLIAgent
     CLIAgent -->|"HTTPS POST JSON + API Key"| ReverseProxy
-    Browser -->|"HTTPS REST / JSON + JWT Cookie"| ReverseProxy
+    Browser -->|"HTTPS REST / JSON + Bearer JWT"| ReverseProxy
     MidtransAPI -->|"HTTPS POST Webhook Signature"| ReverseProxy
 
     ReverseProxy --> BackendAPI
@@ -695,9 +696,9 @@ stateDiagram-v2
 
 ### 2.4 Desain Arsitektur Basis Data (Database Design)
 
-#### 2.4.1 Entity-Relationship Diagram (ERD Relasional - The Lean 11 Tables)
+#### 2.4.1 Entity-Relationship Diagram (ERD Relasional - The Lean 11 Core Tables + `enterprise_inquiries`)
 
-Sistem basis data PostgreSQL VulnFlow AI mengadopsi arsitektur ramping dan pragmatis **The Lean 11 Tables**. Skema ini secara komprehensif mendukung seluruh 19 Use Case, multi-tenancy, penegakan kuota, dan jejak audit tanpa tabel-tabel redundan (*Zero Over-Engineering*):
+Sistem basis data PostgreSQL VulnFlow AI dibangun dari skema inti ramping **The Lean 11 Tables** plus tabel ke-12 `enterprise_inquiries` (`a1b2c3d4e501`), dengan migrasi head Alembic **`c3d4e5f6a703`**:
 
 ```mermaid
 erDiagram
@@ -949,6 +950,7 @@ Sistem basis data PostgreSQL VulnFlow AI mengimplementasikan **11 entitas tabel 
    - `tokens_consumed` (INTEGER, Default: 0)
    - `is_fallback` (BOOLEAN, Default: false)
    - `approval_status` (VARCHAR(20), Default: 'DRAFT') — 'DRAFT', 'APPROVED'
+   - `prompt_tokens` / `candidates_tokens` (INTEGER, Default: 0) & `model_used` (VARCHAR(80), Nullable)
    - `generated_at` (TIMESTAMPTZ, Default: `NOW()`)
 
 10. **Tabel `reports`:** Berkas artefak PDF resmi yang telah dikompilasi.
@@ -958,17 +960,20 @@ Sistem basis data PostgreSQL VulnFlow AI mengimplementasikan **11 entitas tabel 
     - `version` (VARCHAR(20), Default: 'v1.0')
     - `storage_path` (VARCHAR(500), Not Null) — S3 Object Key
     - `watermark_applied` (BOOLEAN, Not Null)
+    - `sha256_hash` (VARCHAR(64), Nullable), `verification_code` (VARCHAR(32), Nullable Unique), `is_rasterized` (BOOLEAN, Default: false), `is_signed` (BOOLEAN, Default: false)
     - `generated_at` (TIMESTAMPTZ, Default: `NOW()`)
 
 11. **Tabel `audit_logs` (Partisi Deklaratif Bulanan):** Jejak audit keamanan sistem (SSOT).
-    - `id` (UUID, Primary Key, Default: `gen_random_uuid()`)
-    - `workspace_id` (UUID, Foreign Key ke `workspaces.id` ON DELETE CASCADE, Index)
+    - `id` (UUID, Composite PK `(id, created_at)`, Default: `gen_random_uuid()`)
+    - `workspace_id` (UUID, Not Null, Index — **tanpa FK** ke `workspaces` agar log audit tetap utuh pasca-penghapusan workspace sesuai UC-04 E2)
     - `actor_user_id` (UUID, Nullable, Foreign Key ke `users.id`, Index)
     - `action` (VARCHAR(50), Not Null) — Misal: 'LOGIN', 'FINDING_STATUS_CHANGE', 'PAYMENT_SETTLED', 'PDF_EXPORT'
-    - `target_entity` (VARCHAR(50), Not Null) — 'findings', 'subscriptions', 'workspaces'
+    - `target_entity` (VARCHAR(128), Not Null) — mis. `finding:<uuid>`, `enterprise_inquiry:<uuid>` (`c3d4e5f6a703`)
     - `ip_address` (VARCHAR(45), Not Null)
     - `details` (JSONB, Not Null) — Payload perubahan status/alasan triase terstruktur
-    - `created_at` (TIMESTAMPTZ, Default: `NOW()`, Not Null)
+    - `created_at` (TIMESTAMPTZ, Composite PK, Default: `NOW()`, Not Null)
+
+12. **Tabel `enterprise_inquiries` (`a1b2c3d4e501`):** Permintaan paket Enterprise publik maupun dari workspace (`/contact`, `/app/billing`, dikelola Admin pada tab `Workspaces & Plans`), beserta tambahan kolom `users.{is_superadmin, totp_secret}` (`f6c9a3b15d02`), `subscriptions.custom_batch_limit` (`a1b2c3d4e501`), dan `projects.tech_stack` JSONB (`b2c3d4e5f602`).
 
 > **Catatan Keputusan Arsitektur & Desain Ramping (The Lean 11 Tables Rationale):**
 > 1. **CWE Knowledge Base (Zero-Latency In-Memory):** Taksonomi CWE bersifat statis dan dimuat langsung ke memori runtime dari file lokal `app/data/cwe_catalog.json` ($\mathcal{O}(1)$ lookup $< 0.001$ ms), mengeliminasi latensi kueri database pada fallback path.
@@ -1608,7 +1613,7 @@ Diagram protokol jaringan & kontrol pengerasan sudah dirinci di §2.5.2 (tidak d
 
 ### 2.7 Arsitektur Ketahanan Sistem & Penanganan Kasus Batas (System Resilience & Edge Case Mitigation Strategy)
 
-Untuk menjamin kualitas keandalan tingkat tinggi (*High Reliability*) sesuai karakteristik **ISO/IEC 25010:2023** (*Fault Tolerance & Availability*) serta menghilangkan hambatan alur kerja pengguna (*Frictionless UX*), sistem mengimplementasikan pola pertahanan terstruktur terhadap **18 Kasus Batas Kritis (Edge Cases EC-01 s.d. EC-18)**. Rujukan teknis mendalam dan skenario pengujian QA diatur pada dokumen pelengkap [**DOCS/EDGE_CASES_AND_RESILIENCE.md**](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/EDGE_CASES_AND_RESILIENCE.md).
+Untuk menjamin kualitas keandalan tingkat tinggi (*High Reliability*) sesuai karakteristik **ISO/IEC 25010:2023** (*Fault Tolerance & Availability*) serta menghilangkan hambatan alur kerja pengguna (*Frictionless UX*), sistem mengimplementasikan pola pertahanan terstruktur terhadap **18 Kasus Batas Kritis (Edge Cases EC-01 s.d. EC-18)**. Rujukan teknis mendalam dan skenario pengujian QA diatur pada dokumen pelengkap [**DOCS/EDGE_CASES_AND_RESILIENCE.md**](EDGE_CASES_AND_RESILIENCE.md).
 
 #### 2.7.1 Matriks 18 Kasus Batas Kritis Alur Kerja (EC-01 s.d. EC-18)
 
@@ -1896,9 +1901,9 @@ Saat pengguna menjalankan perintah `vulnflow push`, antarmuka konsol menyajikan 
 
 Antarmuka web dibangun menggunakan arsitektur *Single Page Application (SPA)* berbasis Vue 3 (Composition API), Vue Router, Vite, dan Tailwind CSS dengan tema ramah praktisi keamanan (*Security Dark/Light Theme*). Komponen UI mengadopsi pustaka **shadcn-vue** (port Vue dari shadcn/ui berbasis Radix Vue) agar bahasa visual dan desain token tetap konsisten dengan spesifikasi awal.
 
-**Dua kelompok rute dalam satu router Vue yang sama** (lihat PLAN.md FASE 6 untuk breakdown tugas lengkap):
-- **Rute Publik** (`/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`) — tanpa login, memenuhi 5 halaman wajib mata kuliah Desain Web. Spesifikasi UI/UX lengkapnya (Live Sandbox toggle, diagram pipa 4-Node, katalog triase mock, dsb.) berada di `Desweb/DOCS/Dokumentasi_Proyek_Desweb_VulnFlow_AI.docx` (UC-01 s.d. UC-05a) dan **tidak diduplikasi** di sini agar kedua dokumen tidak saling menyimpang.
-- **Rute Terautentikasi** (`/app/*`, dijaga *navigation guard* JWT) — dashboard SaaS VulnFlow AI yang sesungguhnya, dirinci pada Wireframe 1–5 di bawah ini.
+**Dua kelompok rute dalam satu router Vue yang sama** (lihat [PLAN.md](PLAN.md) FASE 6 untuk breakdown tugas lengkap):
+- **Rute Publik** (`/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`, `/verify/:code?`) — 6 rute publik tanpa login (Home + Optical Privacy Lens, Alur Kerja 4 Tahap, Katalog Triase mock, Detail Temuan mock, Kalkulator Paket & Enterprise Inquiry ber-CAPTCHA, serta Verifikasi Provenance PDF) untuk rubrik mata kuliah Desain Web.
+- **Rute Terautentikasi** (`/app/*`, `/app/admin`, dijaga *navigation guard* Bearer JWT) — dashboard SaaS VulnFlow AI yang sesungguhnya serta konsol Superadmin 4 tab.
 
 #### 4.2.1 Wireframe 1: Dasbor Utama & Sebaran Metrik CVSS
 
@@ -2050,7 +2055,7 @@ Warna tingkat keparahan (*Severity Badges*) mengadopsi standar internasional FIR
 
 ## BAB 5: MATRIKS KETERLACAKAN DESAIN SISTEM (DESIGN TRACEABILITY MATRIX - DTM)
 
-Matriks berikut menjamin konsistensi mutlak (*bidirectional traceability*) antara spesifikasi kebutuhan pada **SRS v3.5.0 (Bab 4, 5, dan 6)** dengan implementasi arsitektur perangkat lunak pada **SDD v1.6.0** (Komponen C4, Tabel Basis Data The Lean 11 Tables, Kontrak REST API, dan Diagram Sekuensial):
+Matriks berikut menjamin konsistensi mutlak (*bidirectional traceability*) antara spesifikasi kebutuhan pada **SRS v3.6.0 (Bab 4, 5, dan 6)** dengan implementasi arsitektur perangkat lunak pada **SDD v1.7.0** (Komponen C4, Basis Data 12 Tabel, Kontrak REST API termasuk job asinkron AI/PDF, verifikasi `/public/verify/{code}`, `/public/enterprise-inquiries/*`, serta `/admin/*`):
 
 | ID Use Case | Nama Use Case UML | Paket FR | Lapisan Komponen SDD (C4 Level 3) | Tabel Relasional Basis Data | Rute / Kontrak REST API Terkait | Sequence Diagram |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -2091,7 +2096,7 @@ Matriks berikut menjamin konsistensi mutlak (*bidirectional traceability*) antar
 
 ## BAB 6: PENUTUP & LEMBAR PENGESAHAN DESAIN TEKNIS
 
-Dokumen Spesifikasi Desain Perangkat Lunak (*Software Design Description*) Versi 1.6.0 ini telah disusun secara komprehensif mengacu pada standar rekayasa perangkat lunak internasional **IEEE Std 1016:2009** dan **ISO/IEC/IEEE 42010:2011** untuk merealisasikan seluruh kebutuhan sistem yang didefinisikan pada dokumen **[Software Requirements Specification (SRS) v3.5.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SRS.md)**.
+Dokumen Spesifikasi Desain Perangkat Lunak (*Software Design Description*) Versi 1.7.0 ini telah disusun secara komprehensif mengacu pada standar rekayasa perangkat lunak internasional **IEEE Std 1016:2009** dan **ISO/IEC/IEEE 42010:2011** untuk merealisasikan seluruh kebutuhan sistem yang didefinisikan pada dokumen **[Software Requirements Specification (SRS) v3.6.0](SRS.md)**.
 
 Dokumen ini menjadi acuan tunggal arsitektur dan cetak biru perancangan teknis bagi seluruh pengembang selama fase implementasi kode program, integrasi basis data, pengujian unit/integrasi, dan demonstrasi pengujian perangkat lunak sistem **VulnFlow AI** pada mata kuliah **Implementasi Perancangan Perangkat Lunak (IPPL)**.
 

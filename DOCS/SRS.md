@@ -8,10 +8,10 @@
 **Standar Kualitas Perangkat Lunak:** ISO/IEC 25010:2023 *(Systems and software Quality Requirements and Evaluation - SQuaRE)*  
 **Standar Penilaian Kerentanan:** FIRST CVSS v3.1 *(Primary Production Baseline)* & CVSS v4.0 *(Forward-Compatible Architecture)*  
 **Model Notasi Rekayasa:** Unified Modeling Language (UML 2.5) Use Case Packages dengan Dekomposisi Granular `«include»` & `«extend»`  
-**Versi Dokumen:** 3.5.0 (Traceability Matrix Completion Edition)  
-**Status Dokumen:** Disetujui untuk Implementasi  
-**Tanggal Rilis:** 27 September 2026  
-**Dokumen Desain Terkait:** [Software Design Description (SDD) v1.6.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SDD.md)  
+**Versi Dokumen:** 3.6.0 (v1.0.0 GA Release Sync Edition)  
+**Status Dokumen:** Dirilis Resmi (`v1.0.0` GA)  
+**Tanggal Rilis:** 24 November 2026  
+**Dokumen Desain Terkait:** [Software Design Description (SDD) v1.7.0](SDD.md)  
 
 ---
 
@@ -29,9 +29,10 @@
 | 3.0.0 | 26 September 2026 | Pemisahan formal dokumentasi rekayasa perangkat lunak menjadi dua dokumen mandiri sesuai standar industri: **SRS** (Kebutuhan Sistem, FR, NFR ISO 25010, Use Case Diagram, Use Case Descriptions Cockburn format dengan analisis edge cases, & Traceability Matrix) mengacu ISO/IEC/IEEE 29148:2018; dan **SDD** (Desain Arsitektur C4, Activity Diagrams, State Machine, ERD, STRIDE, Network Security, Kontrak API, Sequence Diagrams, & UI/UX Wireframes) mengacu IEEE 1016:2009. | Tim Rekayasa Perangkat Lunak IPPL |
 | 3.1.0 | 27 September 2026 | Penyelarasan komprehensif spesifikasi teknis untuk implementasi Spec-Driven Development: Spesifikasi eksplisit Payment Gateway Midtrans Snap & Sandbox Simulator (QRIS, Virtual Account, & Webhook) pada FR-SUB dan UC-15; penegasan tech stack baseline (FastAPI Pragmatic Mode, React/shadcn, PostgreSQL 16, Redis, WeasyPrint); serta klarifikasi roadmap lingkup rilis v1.0 (Distributed CLI) dan rilis v1.1 (Surface Web Audit). | Tim Rekayasa Perangkat Lunak IPPL |
 | 3.2.0 | 20 Oktober 2026 | Patch konsistensi hasil review pra-implementasi: (1) Perbaikan kontradiksi tech stack §1.3/§2.3 yang masih menyebut Next.js & Python 3.11 agar sinkron dengan baseline aktual SDD/PLAN (React 19 + Vite SPA, Python 3.12+); (2) Klarifikasi granularitas `Idempotency-Key` pada UC-07 (langkah 3, E2, E3) untuk skenario *chunked streaming* file > 200 MB, menegaskan `dedup_hash` per-temuan (EC-08) sebagai jaring pengaman data yang sesungguhnya; (3) Perincian cakupan "pembersihan permanen" pasca soft-delete 30 hari pada UC-04 E2 (objek Object Storage vs baris `audit_logs` yang immutable), dengan cross-reference ke UC-19 E1. | Tim Rekayasa Perangkat Lunak IPPL |
-| 3.3.0 | 20 Oktober 2026 | Penyatuan stack frontend web dengan rubrik wajib mata kuliah Desain Web: seluruh rujukan React 19 pada §1.3 dan §2.3 diganti menjadi **Vue 3 (Composition API) + Vue Router**, agar satu basis kode `apps/web` memenuhi baik kebutuhan fungsional VulnFlow AI (IPPL) maupun rubrik penilaian Desweb (Vue 3, Vue Router, minimal 5 halaman). Tidak ada perubahan pada kontrak API, skema data, atau kebutuhan fungsional lain — murni perubahan pilihan teknologi lapisan presentasi. | Tim Rekayasa Perangkat Lunak IPPL |
-| 3.4.0 | 20 Oktober 2026 | Penambahan **Bab 4.10 (FR-PUB)**: mendefinisikan 5 rute publik tanpa-login (Home/Sandbox, About/Architecture, Triage Catalog mock, Finding Detail mock, Audit Booking) yang hidup berdampingan dengan dashboard terautentikasi `/app/*` dalam satu `apps/web`, merujuk `Desweb/DOCS/Dokumentasi_Proyek_Desweb_VulnFlow_AI.docx` sebagai spesifikasi UC mengikat (tidak diduplikasi) agar klaim "satu basis kode memenuhi dua mata kuliah" (SRS 3.3.0) benar-benar terverifikasi di tingkat rute & konten, bukan hanya jumlah halaman. Ditambahkan juga FR-PUB-003 (isolasi data mock dari data produksi) untuk mencegah halaman publik membocorkan data klien asli. | Tim Rekayasa Perangkat Lunak IPPL |
+| 3.3.0 | 20 Oktober 2026 | Penyatuan stack frontend web dengan rubrik wajib mata kuliah Desain Web: seluruh rujukan React 19 pada §1.3 dan §2.3 diganti menjadi **Vue 3 (Composition API) + Vue Router**, agar satu basis kode `apps/web` memenuhi baik kebutuhan fungsional VulnFlow AI (IPPL) maupun rubrik penilaian Desain Web (Vue 3, Vue Router, multi-halaman publik). Tidak ada perubahan pada kontrak API, skema data, atau kebutuhan fungsional lain — murni perubahan pilihan teknologi lapisan presentasi. | Tim Rekayasa Perangkat Lunak IPPL |
+| 3.4.0 | 20 Oktober 2026 | Penambahan **Bab 4.10 (FR-PUB)**: mendefinisikan rute publik tanpa-login (Home/Sandbox, About/Architecture, Triage Catalog mock, Finding Detail mock, Audit Booking) yang hidup berdampingan dengan dashboard terautentikasi `/app/*` dalam satu `apps/web` sesuai standar antarmuka publik mata kuliah Desain Web. Ditambahkan juga FR-PUB-003 (isolasi data mock dari data produksi) untuk mencegah halaman publik membocorkan data klien asli. | Tim Rekayasa Perangkat Lunak IPPL |
 | 3.5.0 | 20 Oktober 2026 | Penambahan baris **FR-PUB-001/002/003** ke Matriks Keterlacakan Bab 6, yang sebelumnya tidak ikut termutakhirkan saat Bab 4.10 ditambahkan di versi 3.4.0 — memulihkan klaim "seluruh kebutuhan fungsional terpetakan secara utuh" pada pembuka Bab 6 agar benar-benar akurat. | Tim Rekayasa Perangkat Lunak IPPL |
+| 3.6.0 | 24 November 2026 | Sinkronisasi rilis **v1.0.0 GA**: (1) ekspansi `FR-PUB-001` menjadi **6 rute publik** dengan `/verify/:code?` untuk verifikasi keaslian PDF; (2) penguatan `FR-REP-003` dengan rasterisasi halaman 180 DPI, permission lock `pikepdf`, kode QR provenance, dan sertifikasi PAdES opsional pada paket Free/berbayar; (3) dokumentasi batas maksimal 1 workspace pribadi paket Free (`FR-WSP`), antrean AI asinkron + `ProjectTechStack` + VPC `OllamaLLMAdapter` (`gemini-3-flash-preview` / `gemini-2.5-flash-lite`), serta alur Enterprise Inquiry dengan proteksi CAPTCHA (Cloudflare Turnstile / Math-HMAC) pada `/contact`; (4) pembersihan tautan lokal dan rujukan eksternal. | Tim Rekayasa Perangkat Lunak IPPL |
 
 ---
 
@@ -303,26 +304,26 @@ flowchart TD
 - **FR-TRG-002 (Deduplikasi & Kurasi Laporan):** Sistem harus menyediakan fitur deduplikasi temuan yang teridentifikasi oleh scanner ganda (Nmap dan Nuclei pada port yang sama) serta memungkinkan seleksi temuan mana yang disertakan ke dalam draf laporan resmi.
 
 ### 4.6 FR-AI: AI Ghostwriting & Reporting Assistant
-- **FR-AI-001 (Pemisahan Informasi Total):** Backend dilarang menyertakan data teknis target (IP, port, parameter rentan, payload) ke dalam prompt LLM.
-- **FR-AI-002 (Pembangkitan Konten Dokumen Dinamis):** AI harus merumuskan tiga komponen teks utama: Executive Summary, Business Impact Analysis, dan Actionable Mitigation Steps.
+- **FR-AI-001 (Pemisahan Informasi Total):** Backend dilarang menyertakan data teknis target (IP, port, parameter rentan, payload) ke dalam prompt LLM. Konteks opsional `ProjectTechStack` (`language`, `framework`, `database`) hanya mengizinkan tag arsitektur abstrak ter-whitelist untuk rekomendasi remediasi yang relevan dengan stack.
+- **FR-AI-002 (Pembangkitan Konten Dokumen Dinamis Asinkron & VPC):** AI dijalankan secara asinkron lewat worker Celery + cache Redis (SHA-256) menggunakan Google Gemini (`gemini-3-flash-preview` / fallback `gemini-2.5-flash-lite`) atau adapter VPC privat `OllamaLLMAdapter` (`OLLAMA_BASE_URL`), merumuskan Executive Summary, Business Impact Analysis, dan Actionable Mitigation Steps, dengan fallback otomatis ke katalog CWE deterministik.
 - **FR-AI-003 (Human-in-the-loop Editing):** Teks yang dihasilkan oleh AI wajib dapat ditinjau dan disunting langsung oleh pentester pada antarmuka web sebelum disetujui masuk ke kompilasi akhir.
 
 ### 4.7 FR-REP: Report Engine, White-labeling & PDF Compilation
 - **FR-REP-001 (White-labeling Agensi):** Pengguna tier berbayar (*Pro/Enterprise*) dapat mengunggah logo perusahaan, mengatur warna tema dokumen, dan menyematkan kop surat resmi agensi.
-- **FR-REP-002 (Penggabungan Otomatis AI & PoC):** Mesin penyusun laporan menggabungkan narasi AI dengan bukti temuan teknis asli dari basis data.
-- **FR-REP-003 (Watermark Enforcement):** Seluruh laporan yang dihasilkan oleh akun paket *Free* secara otomatis disematkan watermark diagonal transparan *"Generated by VulnFlow AI - Free Edition"*.
+- **FR-REP-002 (Penggabungan Otomatis AI & PoC):** Mesin penyusun laporan menggabungkan narasi AI dengan bukti temuan teknis asli serta lampiran screenshot PoC dari basis data/storage secara asinkron.
+- **FR-REP-003 (Tamper-Resistant Free Tier & Provenance Verification):** Seluruh laporan paket *Free* disematkan watermark diagonal *"FREE TIER PREVIEW"*, dirasterisasi pada 180 DPI (`pypdfium2` + `Pillow`), dikunci izin modifikasi/ekstraksinya (`pikepdf`), disertai sertifikasi PAdES opsional (`pyHanko`) dan kode verifikasi QR unik (`VF-XXXX-XXXX-XXXX`) yang dapat dicek publik pada rute `/verify/:code?`.
 
-### 4.8 FR-SUB: Subscription Paywall & Quota Enforcement
-- **FR-SUB-001 (Katalog Paket Layanan):** Free Tier (maks. 3 laporan/bulan, watermark aktif), Pro Tier (maks. 30 laporan/bulan, white-label penuh, CLI API Key), Enterprise Tier (kuota unlimited, SSO).
-- **FR-SUB-002 (Enforcement Kuota Real-time):** Saat kuota ekspor laporan habis, sistem mengunci tombol "Compile PDF" dan memunculkan modal paywall interaktif untuk peningkatan tier.
+### 4.8 FR-SUB: Subscription Paywall, Quota & Enterprise Inquiries
+- **FR-SUB-001 (Katalog Paket Layanan & Batas Workspace Free):** Free Tier (maks. 3 laporan/bulan, rasterized + watermark aktif, maks. 50 temuan/batch CLI, maks. 1 workspace pribadi paket Free per pengguna), Pro Tier (maks. 30 laporan/bulan via Midtrans Snap, white-label penuh, maks. 500 temuan/batch CLI), Enterprise Tier (kuota custom/unlimited, batas batch CLI custom hingga 50.000, VPC LLM/Ollama).
+- **FR-SUB-002 (Enforcement Kuota & Enterprise Lead Capture):** Saat kuota ekspor laporan habis, sistem mengunci tombol ekspor dan mengarahkan upgrade ke Billing. Halaman publik `/contact` serta workspace billing mendukung pengajuan **Enterprise Inquiry** (`enterprise_inquiries`) yang dilindungi CAPTCHA anti-bot (Cloudflare Turnstile atau signed single-use Math-HMAC challenge).
 
 ### 4.9 FR-ADM: SaaS Superadmin Operations & AI Telemetry
-- **FR-ADM-001 (Monitoring Konsumsi Token LLM):** Dasbor admin menampilkan metrik total token masuk/keluar harian, estimasi biaya operasional AI dalam USD/IDR, dan latensi rata-rata pemanggilan API AI.
-- **FR-ADM-002 (Tenant & User Suspension):** Superadmin berhak menonaktifkan akun yang terdeteksi melakukan penyalahgunaan sistem.
+- **FR-ADM-001 (Monitoring Konsumsi Token LLM & Plan Governance):** Dasbor admin menampilkan metrik total token, estimasi biaya operasional AI bulanan (USD/IDR), circuit breaker anggaran, serta tab `Workspaces & Plans` untuk meninjau Enterprise Inquiry dan melakukan override paket/kuota workspace.
+- **FR-ADM-002 (Tenant & User Suspension):** Superadmin berhak menonaktifkan akun yang terdeteksi melakukan penyalahgunaan sistem, mencabut sesi JWT dan CLI API key terkait secara langsung.
 
-### 4.10 FR-PUB: Halaman Publik, Demo Sanitasi, & Audit Booking (Lintas Mata Kuliah Desain Web)
-- **FR-PUB-001 (Rute Publik Tanpa Login):** Sistem harus menyediakan 5 rute publik (`/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`) yang dapat diakses tanpa autentikasi, terpisah secara navigasi (route guard) dari dashboard SaaS terautentikasi (`/app/*`) pada Bab 4.1–4.9.
-- **FR-PUB-002 (Spesifikasi Fungsional Eksternal):** Spesifikasi UI/UX dan Use Case lengkap (UC-01 s.d. UC-05a: Live Sandbox demo sanitasi data, eksplorasi arsitektur 4-Node, katalog triase mock, detail temuan mock, booking audit & simulasi Midtrans untuk calon klien) didefinisikan secara mengikat pada dokumen eksternal `Desweb/DOCS/Dokumentasi_Proyek_Desweb_VulnFlow_AI.docx` (disusun untuk mata kuliah Desain Web) dan tidak diduplikasi di SRS/SDD ini guna mencegah dua dokumen saling menyimpang; dokumen tersebut menjadi rujukan mengikat setingkat UC-01 s.d. UC-19 pada Bab 5.
+### 4.10 FR-PUB: Halaman Publik, Demo Sanitasi, & Verifikasi Laporan (Desain Web)
+- **FR-PUB-001 (Rute Publik Tanpa Login):** Sistem menyediakan **6 rute publik** (`/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`, `/verify/:code?`) yang dapat diakses tanpa autentikasi, terpisah secara navigasi (route guard) dari dashboard SaaS terautentikasi (`/app/*`) pada Bab 4.1–4.9.
+- **FR-PUB-002 (Showcase Publik Mandiri):** Seluruh antarmuka dan alur publik (`Home` Live Optical Privacy Lens, `About` alur kerja 4 tahap, `Solutions` katalog triase mock, `SolutionDetail` kalkulator CVSS & dekripsi demo, `Contact` estimator harga & Enterprise Inquiry ber-CAPTCHA, serta `VerifyReport` pengecekan kode provenance PDF) didokumentasikan dan dibangun mandiri di dalam `apps/web` untuk memenuhi rubrik proyek **Desain Web** sekaligus terhubung langsung ke platform SaaS **IPPL**.
 - **FR-PUB-003 (Isolasi Data Demo):** Data yang ditampilkan pada `/solutions` dan `/solutions/:id` bersifat mock/statis dan tidak terhubung ke basis data produksi `findings`/`proofs_of_concept` milik workspace manapun — mencegah kebocoran data klien asli ke halaman yang dapat diakses publik.
 
 ---
@@ -1091,9 +1092,9 @@ Tabel matriks keterlacakan memastikan seluruh kebutuhan fungsional dan 19 use ca
 | **FR-SUB-001** | Paywall, Meteran Kuota, & Transaksi Midtrans | UC-15, UC-16 | Billing Controller, Midtrans Gateway | NFR-SEC-001, NFR-SEC-003 | Elevation of Privilege, Tampering | Integration Test Snap modal, validasi SHA-512 signature, & update kuota Pro |
 | **FR-ADM-001** | Telemetri Token LLM & Cost Circuit Breaker | UC-17 | Admin Controller, Redis Metrics | NFR-PERF-001 | Denial of Service | Audit logging token usage & pemicuan auto-throttle saat lonjakan biaya |
 | **FR-ADM-002** | Penonaktifan Akun & Jejak Audit Immutable | UC-18, UC-19 | Admin Controller, audit_logs (Partisi) | NFR-SEC-001 | Denial of Service, Repudiation | Security Test pembatalan instan sesi akun tersuspensi & kueri audit_logs terpartisi |
-| **FR-PUB-001** | Rute Publik Tanpa Login (Route Guard Split) | UC-01(Desweb) s.d. UC-05a(Desweb) | Vue Router, Navigation Guard (`apps/web`) | NFR-SEC-001 | Spoofing | E2E Test: akses `/`, `/about`, `/solutions`, `/solutions/:id`, `/contact` tanpa JWT → `HTTP 200`; akses `/app/*` tanpa JWT → redirect `/app/login` |
-| **FR-PUB-002** | Spesifikasi Fungsional Eksternal (Rujukan Desweb) | UC-01(Desweb) s.d. UC-05a(Desweb) | Dokumen Eksternal `Desweb/DOCS/Dokumentasi_Proyek_Desweb_VulnFlow_AI.docx` | N/A (Dokumentasi) | — | Review manual kesesuaian 5 halaman publik dengan UC-01–UC-05a Desweb saat demo/sidang lintas mata kuliah |
-| **FR-PUB-003** | Isolasi Data Mock dari Data Produksi | UC-03(Desweb), UC-04(Desweb) | Public Page Components (Mock Data Layer) | NFR-SEC-003 | Information Disclosure | Security Test: pastikan `/solutions` & `/solutions/:id` tidak pernah memanggil endpoint `findings`/`proofs_of_concept` produksi (data mock murni sisi klien) |
+| **FR-PUB-001** | Rute Publik Tanpa Login (Route Guard Split) | Publik Showcase & Provenance | Vue Router, Navigation Guard (`apps/web`) | NFR-SEC-001 | Spoofing | E2E Test: akses `/`, `/about`, `/solutions`, `/solutions/:id`, `/contact`, `/verify/:code?` tanpa JWT → `HTTP 200`; akses `/app/*` tanpa JWT → redirect `/app/login` |
+| **FR-PUB-002** | Showcase & Inquiry Publik Mandiri (Desain Web) | Publik Showcase & Enterprise Lead | Public Pages + CAPTCHA (`apps/web`, `captcha_service.py`) | NFR-SEC-002 | Tampering / Abuse | Verifikasi fungsional 6 halaman publik, estimator tier, CAPTCHA Enterprise inquiry, dan cek kode verifikasi PDF `/verify/:code` |
+| **FR-PUB-003** | Isolasi Data Mock dari Data Produksi | Showcase `/solutions` | Public Page Components (Mock Data Layer) | NFR-SEC-003 | Information Disclosure | Security Test: pastikan `/solutions` & `/solutions/:id` tidak pernah memanggil endpoint `findings`/`proofs_of_concept` produksi (data mock murni sisi klien) |
 
 ---
 
@@ -1101,9 +1102,9 @@ Tabel matriks keterlacakan memastikan seluruh kebutuhan fungsional dan 19 use ca
 
 ## PENUTUP & LEMBAR PENGESAHAN
 
-Dokumen Spesifikasi Kebutuhan Perangkat Lunak (*Software Requirements Specification*) Versi 3.5.0 ini telah diselesaikan dan dimutakhirkan secara komprehensif mengacu pada standar rekayasa perangkat lunak internasional **ISO/IEC/IEEE 29148:2018**, model kualitas **ISO/IEC 25010:2023**, pemodelan formal **UML 2.5 (19 Use Cases terdekomposisi granular beserta 14 sub-kasus include/extend)**, serta standar kalkulasi kerentanan **FIRST CVSS v3.1 & v4.0** untuk mata kuliah **Implementasi Perancangan Perangkat Lunak (IPPL)**. 
+Dokumen Spesifikasi Kebutuhan Perangkat Lunak (*Software Requirements Specification*) Versi 3.6.0 ini telah dimutakhirkan agar sinkron dengan rilis **VulnFlow AI v1.0.0** mengacu pada standar rekayasa perangkat lunak internasional **ISO/IEC/IEEE 29148:2018**, model kualitas **ISO/IEC 25010:2023**, pemodelan formal **UML 2.5 (19 Use Cases terdekomposisi granular beserta 14 sub-kasus include/extend)**, serta standar kalkulasi kerentanan **FIRST CVSS v3.1 & v4.0** untuk mata kuliah **Implementasi Perancangan Perangkat Lunak (IPPL)** dan **Desain Web**.
 
-Dokumen ini menjadi spesifikasi kontrak kebutuhan teknis yang mengikat dan diwujudkan secara arsitektural di dalam dokumen pendamping: **[Software Design Description (SDD) v1.6.0](file:///c:/Users/KaliCodeS3/Documents/Project/IPPL/DOCS/SDD.md)**.
+Dokumen ini menjadi spesifikasi kontrak kebutuhan teknis yang mengikat dan diwujudkan secara arsitektural di dalam dokumen pendamping: **[Software Design Description (SDD) v1.7.0](SDD.md)**.
 
 ---
 *VulnFlow AI Engineering Team — Universitas / Institut Program Studi Informatika — 2026.*

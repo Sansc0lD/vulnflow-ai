@@ -217,6 +217,9 @@ def test_list_findings_poc_decrypt_curation_attachments_and_noop_status(
             )
             assert att.status_code == 201
             assert "https://minio.local/" in att.json()["attachment_url"]
+            refreshed_poc = client.get(f"{base_url}/{ctx['finding_id']}/poc", headers=_auth(ctx))
+            assert refreshed_poc.status_code == 200
+            assert "https://minio.local/" in refreshed_poc.json()["attachment_file_urls"][0]
 
             svg_b64 = base64.b64encode(b"<svg xmlns='http://www.w3.org/2000/svg'/>").decode("ascii")
             assert (

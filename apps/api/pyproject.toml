@@ -1,6 +1,6 @@
 [project]
 name = "vulnflow-api"
-version = "0.1.0"
+version = "1.0.0"
 description = "VulnFlow AI SaaS Backend Core API (FastAPI) — SDD §2.2.2 Container"
 requires-python = ">=3.12"
 dependencies = [

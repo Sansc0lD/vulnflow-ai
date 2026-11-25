@@ -17,6 +17,7 @@ from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import HTMLResponse, JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app import __version__
 from app.core.exceptions import AppError
 from app.routers import admin, ai, auth, billing, ingest, projects, reports, triage, workspaces
 from vulnflow_contracts import ErrorCode, StandardErrorEnvelope
@@ -29,7 +30,7 @@ from vulnflow_contracts import ErrorCode, StandardErrorEnvelope
 # the old scoped-but-nonce-less policy, that inline script was silently
 # blocked and the page rendered completely blank — `curl` can't catch this
 # since it doesn't execute JS or enforce CSP).
-app = FastAPI(title="VulnFlow AI API", docs_url=None, redoc_url=None)
+app = FastAPI(title="VulnFlow AI API", version=__version__, docs_url=None, redoc_url=None)
 app.include_router(auth.router)
 app.include_router(workspaces.router)
 app.include_router(projects.router)

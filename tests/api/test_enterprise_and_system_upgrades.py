@@ -15,6 +15,8 @@ from app.core.totp import compute_totp
 from app.domain.fallback import get_fallback_narrative
 from app.domain.sanitizer import whitelist_tech_stack
 from app.main import app
+from app.models.ai_narrative import AINarrative
+from app.models.audit_log import AuditLog
 from app.models.finding import Finding
 from app.models.project import Project
 from app.models.proof_of_concept import ProofOfConcept
@@ -84,6 +86,12 @@ def _register_user(client: TestClient, email: str = "ent@example.com") -> dict[s
     return resp.json()
 
 
+def _solve_math_prompt(prompt: str) -> str:
+    body = prompt.removeprefix("What is ").removesuffix("?").strip()
+    left, op, right = body.split()
+    return str(int(left) + int(right) if op == "+" else int(left) - int(right))
+
+
 def test_enterprise_inquiry_and_admin_unlimited_provisioning(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -101,32 +109,69 @@ def test_enterprise_inquiry_and_admin_unlimited_provisioning(
             ws_id = reg["workspace_id"]
             user_headers = {"Authorization": f"Bearer {reg['access_token']}"}
 
-            # Public inquiry
+            pub_payload = {
+                "company_name": "Nusantara Cyber",
+                "contact_name": "Rina",
+                "contact_email": "rina@nusantara.io",
+                "team_size": "21-50",
+                "estimated_monthly_reports": 150,
+                "requirements": "Dedicated VPC & 2000 findings CLI batch size.",
+            }
+
+            # Public inquiry requires CAPTCHA challenge
+            no_captcha = client.post("/api/v1/public/enterprise-inquiries", json=pub_payload)
+            assert no_captcha.status_code == 422
+
+            challenge = client.get("/api/v1/public/enterprise-inquiries/challenge")
+            assert challenge.status_code == 200
+            chal_data = challenge.json()
+            assert chal_data["mode"] == "math_hmac"
+            answer = _solve_math_prompt(chal_data["prompt"])
+
+            wrong_captcha = client.post(
+                "/api/v1/public/enterprise-inquiries",
+                json={
+                    **pub_payload,
+                    "captcha_token": chal_data["challenge_token"],
+                    "captcha_answer": str(int(answer) + 1),
+                },
+            )
+            assert wrong_captcha.status_code == 422
+
             pub_inq = client.post(
                 "/api/v1/public/enterprise-inquiries",
                 json={
-                    "company_name": "Nusantara Cyber",
-                    "contact_name": "Rina",
-                    "contact_email": "rina@nusantara.io",
-                    "team_size": "21-50",
-                    "estimated_monthly_reports": 150,
-                    "requirements": "Dedicated VPC & 2000 findings CLI batch size.",
+                    **pub_payload,
+                    "captcha_token": chal_data["challenge_token"],
+                    "captcha_answer": answer,
                 },
             )
             assert pub_inq.status_code == 201
             assert pub_inq.json()["status"] == "NEW"
 
+            # Replaying the same challenge token must be rejected
+            replay_captcha = client.post(
+                "/api/v1/public/enterprise-inquiries",
+                json={
+                    **pub_payload,
+                    "captcha_token": chal_data["challenge_token"],
+                    "captcha_answer": answer,
+                },
+            )
+            assert replay_captcha.status_code == 422
+
             # Workspace-linked inquiry
+            ws_inq_payload = {
+                "company_name": "Corp Sec",
+                "contact_name": "Budi",
+                "contact_email": "budi@corp.example",
+                "team_size": "50+",
+                "requirements": "Unlimited PDF exports and custom SLA.",
+            }
             ws_inq = client.post(
                 f"/api/v1/workspaces/{ws_id}/billing/enterprise-inquiry",
                 headers=user_headers,
-                json={
-                    "company_name": "Corp Sec",
-                    "contact_name": "Budi",
-                    "contact_email": "budi@corp.example",
-                    "team_size": "50+",
-                    "requirements": "Unlimited PDF exports and custom SLA.",
-                },
+                json=ws_inq_payload,
             )
             assert ws_inq.status_code == 201
             inq_id = ws_inq.json()["id"]
@@ -164,6 +209,39 @@ def test_enterprise_inquiry_and_admin_unlimited_provisioning(
             assert override.json()["is_unlimited"] is True
             assert override.json()["custom_batch_limit"] == 2500
 
+            pub_inq_id = pub_inq.json()["id"]
+            upd_pub_inq = client.patch(
+                f"/api/v1/admin/enterprise-inquiries/{pub_inq_id}",
+                headers=admin_headers,
+                json={"status": "CONTACTED", "admin_notes": "Follow-up call scheduled."},
+            )
+            assert upd_pub_inq.status_code == 200
+            assert upd_pub_inq.json()["status"] == "CONTACTED"
+
+            # Only DECLINED inquiries can be deleted
+            del_blocked = client.delete(
+                f"/api/v1/admin/enterprise-inquiries/{pub_inq_id}",
+                headers=admin_headers,
+            )
+            assert del_blocked.status_code == 422
+
+            decline_pub = client.patch(
+                f"/api/v1/admin/enterprise-inquiries/{pub_inq_id}",
+                headers=admin_headers,
+                json={"status": "DECLINED", "admin_notes": "Spam lead"},
+            )
+            assert decline_pub.status_code == 200
+
+            del_ok = client.delete(
+                f"/api/v1/admin/enterprise-inquiries/{pub_inq_id}",
+                headers=admin_headers,
+            )
+            assert del_ok.status_code == 204
+            remaining_inquiries = client.get(
+                "/api/v1/admin/enterprise-inquiries", headers=admin_headers
+            ).json()
+            assert [item["id"] for item in remaining_inquiries] == [inq_id]
+
             upd_inq = client.patch(
                 f"/api/v1/admin/enterprise-inquiries/{inq_id}",
                 headers=admin_headers,
@@ -171,6 +249,41 @@ def test_enterprise_inquiry_and_admin_unlimited_provisioning(
             )
             assert upd_inq.status_code == 200
             assert upd_inq.json()["status"] == "PROVISIONED"
+
+            # Verify authenticated workspace endpoint enforces 5/hour rate limit
+            for _ in range(4):
+                extra = client.post(
+                    f"/api/v1/workspaces/{ws_id}/billing/enterprise-inquiry",
+                    headers=user_headers,
+                    json=ws_inq_payload,
+                )
+                assert extra.status_code == 201
+            rate_limited = client.post(
+                f"/api/v1/workspaces/{ws_id}/billing/enterprise-inquiry",
+                headers=user_headers,
+                json=ws_inq_payload,
+            )
+            assert rate_limited.status_code == 429
+
+            # Verify PostgreSQL column length accommodates enterprise_inquiry:<uuid> (55 chars)
+            target_col = AuditLog.__table__.c.target_entity
+            assert getattr(target_col.type, "length", 0) >= 128
+            audit_rows = (
+                db_session.query(AuditLog)
+                .filter(
+                    AuditLog.action.in_(
+                        [
+                            "ENTERPRISE_INQUIRY_SUBMITTED",
+                            "ADMIN_ENTERPRISE_INQUIRY_UPDATED",
+                            "ADMIN_ENTERPRISE_INQUIRY_DELETED",
+                        ]
+                    )
+                )
+                .all()
+            )
+            assert len(audit_rows) == 9
+            assert all(row.target_entity.startswith("enterprise_inquiry:") for row in audit_rows)
+            assert all(len(row.target_entity) == 55 for row in audit_rows)
 
             sub_resp = client.get(
                 f"/api/v1/workspaces/{ws_id}/billing/subscription",
@@ -424,3 +537,268 @@ def test_stack_aware_remediation_whitelist_and_ollama_adapter() -> None:
     assert adapter.last_usage["candidates_tokens"] == 60
     assert "secret.internal" not in captured["body"]
     assert "framework=fastapi" in captured["body"]
+
+
+def test_enterprise_batch_contract_allows_over_500_findings() -> None:
+    from vulnflow_contracts import BatchIngestRequest
+
+    item = {
+        "title": "Exposed Header",
+        "severity": "INFO",
+        "cvss_version": "3.1",
+        "cvss_score": 0.0,
+        "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:N",
+        "cwe_id": "CWE-200",
+        "target_host": "app.example.com",
+        "source_tool": "nuclei",
+        "proof_of_concept": {"raw_evidence": "ok"},
+    }
+    req = BatchIngestRequest(
+        scan_metadata={
+            "scanner_name": "nuclei",
+            "scanner_version": "v3.2.0",
+            "scan_duration_seconds": 1.0,
+        },
+        findings=[{**item, "endpoint_path": f"/p/{i}"} for i in range(600)],
+    )
+    assert len(req.findings) == 600
+
+
+def test_captcha_local_fallback_blocks_replay_without_redis(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from app.core.exceptions import ValidationFailedError
+    from app.services.captcha_service import (
+        _local_guard_store,
+        issue_inquiry_challenge,
+        verify_inquiry_captcha,
+    )
+
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-captcha-jwt-secret-key-2026")
+    monkeypatch.delenv("TURNSTILE_SITE_KEY", raising=False)
+    monkeypatch.delenv("TURNSTILE_SECRET_KEY", raising=False)
+    _local_guard_store.clear()
+
+    chal = issue_inquiry_challenge()
+    assert chal.mode == "math_hmac" and chal.challenge_token and chal.prompt
+    ans = _solve_math_prompt(chal.prompt)
+
+    verify_inquiry_captcha(
+        captcha_token=chal.challenge_token,
+        captcha_answer=ans,
+        remote_ip="203.0.113.5",
+        redis_client=None,
+    )
+    with pytest.raises(ValidationFailedError):
+        verify_inquiry_captcha(
+            captcha_token=chal.challenge_token,
+            captcha_answer=ans,
+            remote_ip="203.0.113.5",
+            redis_client=None,
+        )
+
+    # Lockout after 3 incorrect attempts without Redis
+    chal2 = issue_inquiry_challenge()
+    assert chal2.challenge_token and chal2.prompt
+    wrong_ans = str(int(_solve_math_prompt(chal2.prompt)) + 99)
+    for _ in range(4):
+        with pytest.raises(ValidationFailedError):
+            verify_inquiry_captcha(
+                captcha_token=chal2.challenge_token,
+                captcha_answer=wrong_ans,
+                remote_ip="203.0.113.5",
+                redis_client=None,
+            )
+
+    # Turnstile mode success & failure branches
+    monkeypatch.setenv("TURNSTILE_SITE_KEY", "ts-site-key")
+    monkeypatch.setenv("TURNSTILE_SECRET_KEY", "ts-secret-key")
+    ts_chal = issue_inquiry_challenge()
+    assert ts_chal.mode == "turnstile"
+    assert ts_chal.site_key == "ts-site-key"
+
+    monkeypatch.setattr(
+        "app.services.captcha_service.httpx.post",
+        lambda *args, **kwargs: SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"success": True},
+        ),
+    )
+    verify_inquiry_captcha(
+        captcha_token="turnstile-tok",
+        captcha_answer=None,
+        remote_ip="203.0.113.5",
+        redis_client=None,
+    )
+
+    monkeypatch.setattr(
+        "app.services.captcha_service.httpx.post",
+        lambda *args, **kwargs: SimpleNamespace(
+            raise_for_status=lambda: None,
+            json=lambda: {"success": False},
+        ),
+    )
+    with pytest.raises(ValidationFailedError):
+        verify_inquiry_captcha(
+            captcha_token="bad-tok",
+            captcha_answer=None,
+            remote_ip="203.0.113.5",
+            redis_client=None,
+        )
+
+
+def test_get_client_ip_ignores_untrusted_proxy_headers() -> None:
+    from types import SimpleNamespace
+
+    from app.core.audit import get_client_ip
+
+    untrusted = SimpleNamespace(
+        client=SimpleNamespace(host="198.51.100.42"),
+        headers={"x-forwarded-for": "1.2.3.4"},
+    )
+    assert get_client_ip(untrusted) == "198.51.100.42"  # type: ignore[arg-type]
+
+    trusted = SimpleNamespace(
+        client=SimpleNamespace(host="127.0.0.1"),
+        headers={"x-forwarded-for": "203.0.113.9, 10.0.0.1"},
+    )
+    assert get_client_ip(trusted) == "203.0.113.9"  # type: ignore[arg-type]
+
+    real_ip_proxy = SimpleNamespace(
+        client=SimpleNamespace(host="10.0.0.5"),
+        headers={"x-real-ip": "198.51.100.99"},
+    )
+    assert get_client_ip(real_ip_proxy) == "198.51.100.99"  # type: ignore[arg-type]
+
+
+def test_telemetry_excludes_prior_month_spend(db_session: Session) -> None:
+    from app.domain.telemetry import compute_ai_telemetry
+
+    ws = Workspace(name="Old Month WS")
+    db_session.add(ws)
+    db_session.flush()
+    proj = Project(
+        workspace_id=ws.id,
+        name="Proj",
+        client_name="Client",
+        target_scope="example.com",
+        roe_start_date=datetime.now(UTC) - timedelta(days=2),
+        roe_end_date=datetime.now(UTC) + timedelta(days=5),
+    )
+    db_session.add(proj)
+    db_session.flush()
+    now = datetime.now(UTC)
+    prior_month = datetime(now.year, now.month, 1, tzinfo=UTC) - timedelta(days=1)
+    db_session.add(
+        AINarrative(
+            project_id=proj.id,
+            executive_summary="Old",
+            business_impact="Old",
+            remediation_priorities=[],
+            tokens_consumed=50_000_000,
+            prompt_tokens=25_000_000,
+            candidates_tokens=25_000_000,
+            generated_at=prior_month,
+        )
+    )
+    db_session.commit()
+
+    telemetry = compute_ai_telemetry(db_session, spend_ceiling_usd=5.0)
+    assert telemetry.total_tokens == 0
+    assert telemetry.circuit_breaker_active is False
+
+
+def test_enterprise_subscription_immune_to_stale_checkout_and_admin_clears_order(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import hashlib
+
+    from app.routers.billing import get_midtrans_adapter
+
+    monkeypatch.setenv("MIDTRANS_SERVER_KEY", "test-server-key")
+    monkeypatch.setenv("SEED_ADMIN_PASSWORD", "Test-Seed-Admin-2026!")
+
+    class _FakeMidtrans:
+        def create_transaction(self, *, order_id: str, gross_amount: int) -> tuple[str, str]:
+            return "snap-tok", "https://snap.local/pay"
+
+    app.dependency_overrides[get_midtrans_adapter] = lambda: _FakeMidtrans()
+    try:
+        with TestClient(app) as client:
+            reg = client.post(
+                "/api/v1/auth/register",
+                json={
+                    "email": "ent-guard@example.com",
+                    "password": "Str0ng!Passw0rd",
+                    "full_name": "Ent Guard",
+                    "workspace_name": "Ent Guard WS",
+                },
+            ).json()
+            ws_id = reg["workspace_id"]
+            headers = {"Authorization": f"Bearer {reg['access_token']}"}
+            checkout = client.post(
+                f"/api/v1/workspaces/{ws_id}/billing/checkout",
+                json={"tier": "PRO"},
+                headers=headers,
+            ).json()
+            stale_order_id = checkout["order_id"]
+
+            seed_defaults(db_session)
+            admin_login = client.post(
+                "/api/v1/auth/login",
+                json={
+                    "email": "admin@vulnflow.local",
+                    "password": get_seed_admin_password(),
+                    "totp_code": compute_totp(get_seed_admin_totp_secret()),
+                },
+            ).json()
+            admin_headers = {"Authorization": f"Bearer {admin_login['access_token']}"}
+
+            ov = client.patch(
+                f"/api/v1/admin/workspaces/{ws_id}/subscription",
+                headers=admin_headers,
+                json={
+                    "tier": "ENTERPRISE",
+                    "monthly_report_quota": -1,
+                    "custom_batch_limit": 3000,
+                    "reason": "Direct Enterprise contract",
+                },
+            )
+            assert ov.status_code == 200
+
+            sig = hashlib.sha512(
+                f"{stale_order_id}200750000.00test-server-key".encode()
+            ).hexdigest()
+            stale_cancel = client.post(
+                "/api/v1/billing/webhook/midtrans",
+                json={
+                    "order_id": stale_order_id,
+                    "status_code": "200",
+                    "gross_amount": "750000.00",
+                    "signature_key": sig,
+                    "transaction_status": "cancel",
+                    "payment_type": "qris",
+                    "transaction_time": "2026-11-24 10:00:00",
+                },
+            )
+            assert stale_cancel.status_code == 200
+
+            # Self-service checkout must also be blocked on ENTERPRISE
+            blocked = client.post(
+                f"/api/v1/workspaces/{ws_id}/billing/checkout",
+                json={"tier": "PRO"},
+                headers=headers,
+            )
+            assert blocked.status_code == 409
+
+            sub = (
+                db_session.query(Subscription)
+                .filter_by(workspace_id=__import__("uuid").UUID(ws_id))
+                .one()
+            )
+            assert sub.tier == "ENTERPRISE"
+            assert sub.midtrans_order_id is None
+    finally:
+        app.dependency_overrides.pop(get_midtrans_adapter, None)

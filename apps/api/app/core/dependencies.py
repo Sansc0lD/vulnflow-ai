@@ -135,6 +135,18 @@ def authenticate_api_key(raw_key: str, workspace_id: uuid.UUID, db: Session) -> 
         # that is soft-deleted and awaiting purge (UC-04).
         raise AuthenticationError("API key is invalid, inactive, or revoked.")
 
+    creator = db.get(User, api_key.created_by_user_id)
+    if creator is None or creator.status != "ACTIVE":
+        raise AuthenticationError("API key owner account is inactive or deleted.")
+
+    member = (
+        db.query(WorkspaceMember)
+        .filter_by(workspace_id=workspace_id, user_id=api_key.created_by_user_id)
+        .one_or_none()
+    )
+    if member is None or member.role not in {"MANAGER", "PENTESTER"}:
+        raise PermissionDeniedError("API key owner does not hold active ingest permissions.")
+
     api_key.last_used_at = datetime.now(UTC)
     db.commit()
     return api_key

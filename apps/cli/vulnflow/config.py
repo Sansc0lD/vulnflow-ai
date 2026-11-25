@@ -28,6 +28,15 @@ def get_config_path() -> Path:
     return Path.home() / ".vulnflow" / "config.json"
 
 
+def normalize_api_url(api_url: str) -> str:
+    cleaned = api_url.strip().rstrip("/")
+    for suffix in ("/api/v1", "/api"):
+        if cleaned.endswith(suffix):
+            cleaned = cleaned[: -len(suffix)].rstrip("/")
+            break
+    return cleaned
+
+
 def save_config(config: CLIConfig, *, path: Path | None = None) -> Path:
     target = path or get_config_path()
     target.parent.mkdir(parents=True, exist_ok=True)
